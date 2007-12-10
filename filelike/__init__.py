@@ -130,7 +130,7 @@ class FileLikeBase:
         self._bufsize = bufsize
         self.__rbuffer = ""
         self.__wbuffer = ""
-    
+
     def _check_mode(self,mode):
         """Check whether the file may be accessed in the given mode.
         <mode> must be one of "r" or "w", and this function returns False
@@ -161,11 +161,11 @@ class FileLikeBase:
                     raise IOError("File not opened for writing")
     
     def seek(self,offset,whence=0):
-        """Provided only raise an IOError - FileLikeBase is not seekable."""
+        """Provided only to raise an IOError - FileLikeBase is not seekable."""
         raise IOError("Object not seekable")
     
     def tell(self):
-        """Provided only raise an IOError - FileLikeBase is not seekable."""
+        """Provided only to raise an IOError - FileLikeBase is not seekable."""
         raise IOError("Object not seekable")
     
     def flush(self):
