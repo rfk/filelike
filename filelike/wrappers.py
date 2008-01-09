@@ -910,9 +910,13 @@ try:
             """
             # Create self._compress to handle compression
             compressor = bz2.BZ2Compressor(compresslevel)
+            toFlush = {'c': False}
             def cfunc(data):
+                toFlush['c'] = True
                 return compressor.compress(data)
             def cflush():
+                if not toFlush['c']:
+                  return None
                 data = compressor.flush()
                 del cfunc.flush
                 return data
@@ -978,9 +982,10 @@ except ImportError:
 
 
 ## Conditionally provide gzip compression support
+# TODO: GzipWrapper not working, it's much more complicated than I imagined
 try:
     import zlib
-    class Gziprapper:
+    class GzipWrapper:
         """Mixin for wrapping files with gzip [de]compression.
 
         This class sets up _compress and _decompress as appropriate for
@@ -1000,10 +1005,17 @@ try:
             """
             # Create self._compress to handle compression
             compressor = zlib.compressobj(compresslevel)
+            toFlush = {'c': False, 'd': False}
             def cfunc(data):
-                return compressor.compress(data)
+                data = compressor.compress(data)
+                toFlush['c'] = True
+                return data
             def cflush():
+                if not toFlush['c']:
+                  return None
                 data = compressor.flush()
+                if data == "":
+                  data = None
                 del cfunc.flush
                 return data
             cfunc.flush = cflush
@@ -1011,9 +1023,15 @@ try:
             # Create self._decompress to handle decompression
             decompressor = zlib.decompressobj()
             def dfunc(data):
-                return decompressor.decompress(data)
+                data = decompressor.decompress(data)
+                toFlush['d'] = True
+                return data
             def dflush():
+                if not toFlush['d']:
+                  return None
                 data = compressor.flush()
+                if data == "":
+                  data = None
                 del dfunc.flush
                 return data
             dfunc.flush = dflush
@@ -1037,7 +1055,7 @@ try:
             GzipWrapper.__init__(self,compresslevel)
             DecompressFile.__init__(self,fileobj,mode)
 
-    class UnGzipFile(BZ2Wrapper,CompressFile):
+    class UnGzipFile(GzipWrapper,CompressFile):
         """Class for reading and writing to a un-gziped file.
         
         This class is the dual of GzipFile - it compresses read data, and
@@ -1100,18 +1118,21 @@ class Test_Compression(unittest.TestCase):
     def setUp(self):
         self.raw1 = "hello world I am raw text"
         self.bz1 = bz2.compress(self.raw1)
-        self.gz1 = zlib.compress(self.raw1)
+        gc = zlib.compressobj()
+        self.gz1 = gc.compress(self.raw1)
+        self.gz1 += gc.flush()
 
     def tearDown(self):
         pass
 
     def _test_rw(self,cls,dataIn,dataOut):
         """Basic read/write testing."""
-        f = cls(StringIO.StringIO(dataOut))
+        f = cls(StringIO.StringIO(dataOut),'r')
         c = "".join(f)
         self.assertEquals(c,dataIn)
         f = cls(StringIO.StringIO(),'w')
         f.write(dataIn)
+        f.flush()
         self.assertEquals(f._fileobj.getvalue(),dataOut)
 
     def test_BZ2File(self):

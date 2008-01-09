@@ -117,7 +117,7 @@ class FileLikeBase:
     
     """
     
-    def __init__(self,bufsize=100):
+    def __init__(self,bufsize=1024):
         """FileLikeBase Constructor.
         The optional argument <bufsize> specifies the number of bytes to
         read at a time when looking for a newline character.  Setting this to
