@@ -86,7 +86,7 @@ class FileWrapper(FileLikeBase):
         <fileobj> must be a file-like object, which is to be wrapped
         in another file-like object to provide additional functionality.
         
-        If given, <mode> must be the access mode string for with which
+        If given, <mode> must be the access mode string under which
         the wrapped file is to be accessed.  If not given or None, it
         is looked up on the wrapped file if possible.  Otherwise, it
         is not set on the object.
@@ -136,26 +136,27 @@ class TransFile(FileWrapper):
     and return a transformed string representing the updated file contents.
     No guarantees are made about the amount of data fed into the function
     at a time (although another wrapper like FixedBlockSizeFile could be
-    used to do so.)  If the transform needs to be flushed when reading/writing
+    used to do so).  If the transform needs to be flushed when reading/writing
     is finished, it should provide a flush() method that returns either None,
     or any data remaining to be read/written.
     
     The default use case assumes either reading+writing with a stateless
     translation function, or exclusive reading or writing.  So, a single
-    function is used for translation on both reads and writes.  Seperate
+    function is used for translation on both reads and writes.  Separate
     reading and writing translation functions may be provided using keyword
     arguments <rfunc> and <wfunc> to the constructor.
     """
     
     def __init__(self,fileobj,func=None,mode=None,rfunc=None,wfunc=None):
         """TransFile constructor.
+
         <fileobj> must be the file-like object whose contents are to be
         transformed, and <func> the callable that will transform the
         contents.  <mode> should be one of "r" or "w" to indicate whether
         reading or writing is desired.  If omitted it is determined from
         <fileobj> where possible, otherwise it defaults to "r".
         
-        If seperate reading/writing translations are required, the
+        If separate reading/writing translations are required, the
         keyword arguments <rfunc> and <wfunc> can be used in place of
         <func>
         """
@@ -427,8 +428,8 @@ class PaddedToBlockSizeFile(FileWrapper):
 
     def _write(self,data,flushing=False):
         """Write the given string to the file."""
-        # Writing at the block size means we dont have to count bytes written
-        # Pad the data if the buffers are being flushed
+        # Writing at the block size means we dont have to count bytes written.
+        # Pad the data if the buffers are being flushed.
         if flushing:
             if self._padwritten:
                 size = 0
@@ -855,47 +856,111 @@ class Test_Cat(unittest.TestCase):
         self.assertEquals(txt,txtC)
 
 
-## Conditionally provide BZ2File if bz2 library is present
+class CompressFile(TransFile):
+    """Compress a file using an arbitrary compression routine.
+
+    All reads from the file are processed using self._compress, while
+    all writes are passed through self._decompress.  Thus CompressFile(fobj)
+    can be seen as the compressed version of fobj.
+
+    Subclasses must implement _compress and _decompress.
+    """
+
+    def __init__(self,fileobj,mode=None):
+        TransFile.__init__(self,fileobj,mode=mode,
+                           rfunc=self._compress,
+                           wfunc=self._decompress)
+
+class DecompressFile(TransFile):
+    """Decompress a file using an arbitrary compression routine.
+
+    All reads from the file are processed using self._decompress, while
+    all writes are passed through self._compress.  Thus DecompressFile(fobj)
+    can be seen as the decompressed version of fobj.
+
+    Subclasses must implement _compress and _decompress.
+    """
+
+    def __init__(self,fileobj,mode=None):
+        TransFile.__init__(self,fileobj,mode=mode,
+                           rfunc=self._decompress,
+                           wfunc=self._compress)
+
+
+## Conditionally provide bz2 compression support
 try:
     import bz2
-    class BZ2File(FileWrapper):
+    class BZ2Wrapper:
+        """Mixin for wrapping files with BZ2 [de]compression.
+
+        This class sets up _compress and _decompress as appropriate for
+        BZ2 handling.  It should be mixed-in with one of CompressFile or
+        DecompressFile, with BZ2Wrapper.__init__ called first.
+        """
+
+        def __init__(self,compresslevel=9):
+            """BZ2Wrapper Constructor.
+
+            <fileobj> is the file object with compressed contents.  <mode>
+            is the file access mode. <compresslevel> an integer between 1
+            and 9 giving the compression level.
+            
+            This does not support simultaneous reading and writing of a BZ2
+            wrapped file, so mode must be either 'r' or 'w'.
+            """
+            # Create self._compress to handle compression
+            compressor = bz2.BZ2Compressor(compresslevel)
+            def cfunc(data):
+                return compressor.compress(data)
+            def cflush():
+                data = compressor.flush()
+                del cfunc.flush
+                return data
+            cfunc.flush = cflush
+            self._compress = cfunc
+            # Create self._decompress to handle decompression
+            decompressor = bz2.BZ2Decompressor()
+            def dfunc(data):
+                return decompressor.decompress(data)
+            self._decompress = dfunc
+
+
+    class BZ2File(BZ2Wrapper,DecompressFile):
         """Class for reading and writing to a bziped file.
         
         This class behaves almost exactly like the bz2.BZ2File class from
         the standard library, except that it accepts an arbitrary file-like
         object and it does not support seek() or tell().
-        
-        All reads from the file are decompressed, all writes are compressed.
         """
     
         def __init__(self,fileobj,mode=None,compresslevel=9):
             """BZ2File Constructor.
+
             <fileobj> is the file object with compressed contents.  <mode>
             is the file access mode. <compresslevel> an integer between 1
             and 9 giving the compression level.
-            
-            Note that it doesnt make sense to open such a file for both
-            reading and writing, so mode should be restricted to either
-            "r" or "w".
             """
-            self.__compressor = bz2.BZ2Compressor(compresslevel)
-            self.__decompressor = bz2.BZ2Decompressor()
-            def wfunc(data):
-                nData = self.__compressor.compress(data)
-                return nData
-            def wflush():
-                # Make flush() safe to call multiple times
-                data = self.__compressor.flush()
-                del wfunc.flush
-                return data
-            wfunc.flush = wflush
-            def rfunc(data):
-                return self.__decompressor.decompress(data)
-            myFileObj = TransFile(fileobj,mode=mode,
-                                          rfunc=rfunc,
-                                          wfunc=wfunc)
-            FileWrapper.__init__(self,myFileObj)
+            BZ2Wrapper.__init__(self,compresslevel)
+            DecompressFile.__init__(self,fileobj,mode)
+
+    class UnBZ2File(BZ2Wrapper,CompressFile):
+        """Class for reading and writing to a un-bziped file.
+        
+        This class is the dual of BZ2File - it compresses read data, and
+        decompresses written data.
+        """
     
+        def __init__(self,fileobj,mode=None,compresslevel=9):
+            """UnBZ2File Constructor.
+
+            <fileobj> is the file object with compressed contents.  <mode>
+            is the file access mode. <compresslevel> an integer between 1
+            and 9 giving the compression level.
+            """
+            BZ2Wrapper.__init__(self,compresslevel)
+            CompressFile.__init__(self,fileobj,mode)
+    
+
     ##  Add handling of .bz2 files to filelike.open()
     def _BZ2File_decoder(fileobj):
         """Decoder function for handling .bz2 files with filelike.open"""
@@ -912,33 +977,84 @@ except ImportError:
     pass
 
 
-## Conditionally provide GzipFile if gzip library is present
+## Conditionally provide gzip compression support
 try:
-    import gzip
-    class GzipFile(FileWrapper):
-        """Class for reading and writing to a gzipped file.
+    import zlib
+    class Gziprapper:
+        """Mixin for wrapping files with gzip [de]compression.
+
+        This class sets up _compress and _decompress as appropriate for
+        gzip handling.  It should be mixed-in with one of CompressFile or
+        DecompressFile, with GzipWrapper.__init__ called first.
+        """
+
+        def __init__(self,compresslevel=9):
+            """GzipWrapper Constructor.
+
+            <fileobj> is the file object with compressed contents.  <mode>
+            is the file access mode. <compresslevel> an integer between 1
+            and 9 giving the compression level.
+            
+            This does not support simultaneous reading and writing of a gzip
+            wrapped file, so mode must be either 'r' or 'w'.
+            """
+            # Create self._compress to handle compression
+            compressor = zlib.compressobj(compresslevel)
+            def cfunc(data):
+                return compressor.compress(data)
+            def cflush():
+                data = compressor.flush()
+                del cfunc.flush
+                return data
+            cfunc.flush = cflush
+            self._compress = cfunc
+            # Create self._decompress to handle decompression
+            decompressor = zlib.decompressobj()
+            def dfunc(data):
+                return decompressor.decompress(data)
+            def dflush():
+                data = compressor.flush()
+                del dfunc.flush
+                return data
+            dfunc.flush = dflush
+            self._decompress = dfunc
+
+
+    class GzipFile(GzipWrapper,DecompressFile):
+        """Class for reading and writing to a bziped file.
         
-        This class simply wraps the inbuilt GzipFile class.
+        This class behaves almost exactly like the gzip.GzipFile class from
+        the standard library.
         """
     
         def __init__(self,fileobj,mode=None,compresslevel=9):
             """GzipFile Constructor.
+
             <fileobj> is the file object with compressed contents.  <mode>
             is the file access mode. <compresslevel> an integer between 1
             and 9 giving the compression level.
             """
-            myFileObj = gzip.GzipFile(fileobj.name,
-                                      mode=mode,
-                                      compresslevel=compresslevel,
-                                      fileobj=fileobj)
-            FileWrapper.__init__(self,myFileObj)
-            # Decode gzip.GzipFile mode ids
-            if self.mode == 1:
-                self.mode = "r"
-            elif self.mode == 2:
-                self.mode = "w"
+            GzipWrapper.__init__(self,compresslevel)
+            DecompressFile.__init__(self,fileobj,mode)
+
+    class UnGzipFile(BZ2Wrapper,CompressFile):
+        """Class for reading and writing to a un-gziped file.
+        
+        This class is the dual of GzipFile - it compresses read data, and
+        decompresses written data.
+        """
     
-    ##  Add handling of .bgz files to filelike.open()
+        def __init__(self,fileobj,mode=None,compresslevel=9):
+            """UnGzipFile Constructor.
+
+            <fileobj> is the file object with compressed contents.  <mode>
+            is the file access mode. <compresslevel> an integer between 1
+            and 9 giving the compression level.
+            """
+            GzipWrapper.__init__(self,compresslevel)
+            CompressFile.__init__(self,fileobj,mode)
+    
+    ##  Add handling of .gz files to filelike.open()
     def _GzipFile_decoder(fileobj):
         """Decoder function for handling .gz files with filelike.open"""
         if not fileobj.name.endswith(".gz"):
@@ -978,6 +1094,42 @@ class Test_OpenerDecoders(unittest.TestCase):
         f = filelike.open("http://www.rfk.id.au/scratch/test.txt.bz2")
         self.assertEquals(f.read(),"content goes here if you please.\n")
 
+class Test_Compression(unittest.TestCase):
+    """Testcases for the filelike.Opener decoder functions."""
+    
+    def setUp(self):
+        self.raw1 = "hello world I am raw text"
+        self.bz1 = bz2.compress(self.raw1)
+        self.gz1 = zlib.compress(self.raw1)
+
+    def tearDown(self):
+        pass
+
+    def _test_rw(self,cls,dataIn,dataOut):
+        """Basic read/write testing."""
+        f = cls(StringIO.StringIO(dataOut))
+        c = "".join(f)
+        self.assertEquals(c,dataIn)
+        f = cls(StringIO.StringIO(),'w')
+        f.write(dataIn)
+        self.assertEquals(f._fileobj.getvalue(),dataOut)
+
+    def test_BZ2File(self):
+        """Test operation of BZ2File."""
+        self._test_rw(BZ2File,self.raw1,self.bz1)
+
+    def test_UnBZ2File(self):
+        """Test operation of UnBZ2File."""
+        self._test_rw(UnBZ2File,self.bz1,self.raw1)
+
+    def test_GzipFile(self):
+        """Test operation of GzipFile."""
+        self._test_rw(GzipFile,self.raw1,self.gz1)
+
+    def test_UnGzipFile(self):
+        """Test operation of UnGzipFile."""
+        self._test_rw(UnGzipFile,self.gz1,self.raw1)
+    
 
 
 def testsuite():
@@ -989,6 +1141,11 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_PaddedToBlockSizeFile))
     suite.addTest(unittest.makeSuite(Test_Cat))
     suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
+    try:
+      if bz2 and zlib:
+        suite.addTest(unittest.makeSuite(Test_Compression))
+    except NameError:
+      pass
     return suite
         
 

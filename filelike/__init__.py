@@ -155,7 +155,7 @@ class FileLikeBase:
         if hasattr(self,"mode"):
             if mode == "r":
                 if "r" not in self.mode:
-                    raise IOError("File not opened for reading")    
+                    raise IOError("File not opened for reading")
             if mode == "w":
                 if "w" not in self.mode and "a" not in self.mode:
                     raise IOError("File not opened for writing")
