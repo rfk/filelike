@@ -108,6 +108,10 @@ class FileWrapper(FileLikeBase):
         if hasattr(self._fileobj,"close"):
             self._fileobj.close()
 
+    def unwrap(self):
+        """Remove binding to underlying file-like object."""
+        self._fileobj = None
+
     def flush(self):
         """Flush the write buffers of the file."""
         FileLikeBase.flush(self)
@@ -197,7 +201,7 @@ class TransFile(FileWrapper):
             return None
         data = self._fileobj.read(sizehint)
         if data != "":
-            data = self._rfunc(data)
+            tData = self._rfunc(data)
         if sizehint <= 0 or len(data) < sizehint:
             self._finished = True
             # Flush func if necessary
@@ -205,9 +209,9 @@ class TransFile(FileWrapper):
             if data2 is None:
                 if data == "":
                     return None
-                return data
-            return data + data2
-        return data
+                return tData
+            return tData + data2
+        return tData
     
     def _write(self,data):
         """Write the given data to the file."""
@@ -378,7 +382,7 @@ class PaddedToBlockSizeFile(FileWrapper):
     This data is removed from the end of the file if it is encoutered
     upon reading.
     
-    No guarantee is made that reads or writes are requsted at the
+    No guarantee is made that reads or writes are requested at the
     blocksize - use FixedBlockSizeFile to achieve this.
     """
     
@@ -491,6 +495,8 @@ class Test_PaddedToBlockSizeFile(unittest.TestCase):
         self.assertEquals(txt,self.textin)
 
 
+
+
 class DecryptFile(FileWrapper):
     """Class for reading and writing to an encrypted file.
     
@@ -523,6 +529,11 @@ class DecryptFile(FileWrapper):
         myFileObj = FixedBlockSizeFile(myFileObj,cipher.block_size)
         FileWrapper.__init__(self,myFileObj)
 
+    def setCipher(self,cipher):
+        """Change the cipher after object initialization."""
+        self.__cipher = cipher
+        self._rfunc = cipher.decrypt
+        self._wfunc = cipher.encrypt
 
 class EncryptFile(FileWrapper):
     """Class for reading and writing to an decrypted file.
@@ -530,7 +541,7 @@ class EncryptFile(FileWrapper):
     This class accesses a decrypted file using a ciphering object
     compliant with PEP272: "API for Block Encryption Algorithms".
     All reads from the file are automatically encrypted, while writes
-    to the file are automatically decrypted.  Thus, DecryptFile(fobj)
+    to the file are automatically decrypted.  Thus, EncryptFile(fobj)
     can be seen as the encrypted version of the file-like object fobj.
 
     Because this class is implemented on top of FixedBlockSizeFile,
@@ -555,6 +566,11 @@ class EncryptFile(FileWrapper):
                                       wfunc=cipher.decrypt)
         myFileObj = FixedBlockSizeFile(myFileObj,cipher.block_size)
         FileWrapper.__init__(self,myFileObj)
+
+    def setCipher(self,cipher):
+        """Change the cipher after object initialization."""
+        self.__cipher = cipher
+        self._wfunc = cipher.decrypt
     
     def __encrypt(self,data):
         """Encrypt the given data.
@@ -568,7 +584,7 @@ class EncryptFile(FileWrapper):
 
 
 class Test_CryptFiles(unittest.TestCase):
-    """Testcases for the (En/De)CryptFile classes."""
+    """Testcases for the (En/De)cryptFile classes."""
     
     def setUp(self):
         import StringIO
@@ -1168,6 +1184,27 @@ def testsuite():
     except NameError:
       pass
     return suite
+
+
+class Debug(FileWrapper):
+    """Dump reads/writes to the screen."""
+
+    def __init__(self,fileobj,mode=None,dbgname=""):
+        FileWrapper.__init__(self,fileobj,mode)
+        self._dbgname = dbgname
+
+    def _read(self,sizehint=-1):
+        data = self._fileobj.read(sizehint)
+        print self._dbgname + ":R: " + repr(data)
+        if data == "": return None
+        return data
+
+    def _write(self,data):
+        print self._dbgname + ":W: " + repr(data)
+        return self._fileobj.write(data)
+
+    def close(self):
+        print self._dbgname + ":C"
         
 
 # Run regression tests when called from comand-line
