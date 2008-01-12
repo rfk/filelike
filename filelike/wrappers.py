@@ -25,32 +25,31 @@
 This module builds on the basic functionality of the filelike module to
 provide a collection of useful classes.  These include:
     
-    * TransFile:  pass file contents through an arbitrary translation
+    * Translate:  pass file contents through an arbitrary translation
                   function (e.g. compression, encryption, ...)
                   
-    * FixedBlockSizeFile:  ensure all read/write requests are aligned with
-                           a given blocksize
+    * FixedBlockSize:  ensure all read/write requests are aligned with
+                       a given blocksize
                            
-    * DecryptFile:    on-the-fly reading and writing to an encrypted file
-                      (using PEP272 cipher API)
+    * Decrypt:    on-the-fly reading and writing to an encrypted file
+                  (using PEP272 cipher API)
 
-    * BZ2File:    on-the-fly decompression of bzip'd files
-                  (like the standard library's bz2 module, but accepts
-                   any file-like object)
+    * BZip2:    on-the-fly decompression of bzip'd files
+                (like the standard library's bz2 module, but accepts
+                any file-like object)
  
 As an example of the type of thing this module is designed to achieve, here's
-an example of using the DecryptFile class to transparently access an encrypted
+an example of using the Decrypt wrapper to transparently access an encrypted
 file:
     
     # Create the decryption key
     from Crypto.Cipher import DES
     cipher = DES.new('abcdefgh',DES.MODE_ECB)
     # Open the encrypted file
-    f = DecryptFile(file("some_encrypted_file.bin","r"),cipher)
+    f = Decrypt(file("some_encrypted_file.bin","r"),cipher)
     
 The object in <f> now behaves as a file-like object, transparently decrypting
 the file on-the-fly as it is read.
-
 """ 
 
 import filelike
@@ -59,8 +58,16 @@ from filelike import FileLikeBase
 import os
 import unittest
 import StringIO
+import warnings
 
-
+def _deprecate(oldName,newClass):
+    """Mark an old class name as deprecated."""
+    class Deprecated(newClass):
+        def __init__(self,*args,**kwds):
+            msg = oldName + " is deprecated, please use " + newClass.__name__
+            warnings.warn(msg,category=DeprecationWarning)
+            newClass.__init__(self,*args,**kwds)
+    globals()[oldName] = Deprecated
 
 class FileWrapper(FileLikeBase):
     """Base class for objects that wrap a file-like object.
@@ -128,7 +135,7 @@ class FileWrapper(FileLikeBase):
         return self._fileobj.write(string)
 
 
-class TransFile(FileWrapper):
+class Translate(FileWrapper):
     """Class implementing some translation on a file's contents.
     
     This class wraps a file-like object in another file-like object,
@@ -139,7 +146,7 @@ class TransFile(FileWrapper):
     The translating function must accept a string as its only argument,
     and return a transformed string representing the updated file contents.
     No guarantees are made about the amount of data fed into the function
-    at a time (although another wrapper like FixedBlockSizeFile could be
+    at a time (although another wrapper like FixedBlockSize could be
     used to do so).  If the transform needs to be flushed when reading/writing
     is finished, it should provide a flush() method that returns either None,
     or any data remaining to be read/written.
@@ -152,7 +159,7 @@ class TransFile(FileWrapper):
     """
     
     def __init__(self,fileobj,func=None,mode=None,rfunc=None,wfunc=None):
-        """TransFile constructor.
+        """Translate constructor.
 
         <fileobj> must be the file-like object whose contents are to be
         transformed, and <func> the callable that will transform the
@@ -225,9 +232,11 @@ class TransFile(FileWrapper):
             self._fileobj.write(data)
         FileWrapper.flush(self)
 
+_deprecate("TransFile",Translate)
 
-class Test_TransFile(unittest.TestCase):
-    """Testcases for the TransFile class."""
+
+class Test_Translate(unittest.TestCase):
+    """Testcases for the Translate class."""
     
     def setUp(self):
         import StringIO
@@ -244,33 +253,33 @@ class Test_TransFile(unittest.TestCase):
 
     def test_read(self):
         """Test reading the entire file"""
-        tf = TransFile(self.testfileR,self.f_noop,"r")
+        tf = Translate(self.testfileR,self.f_noop,"r")
         self.assert_(tf.read() == "".join(self.testlines))
 
     def test_readbytes(self):
         """Test reading a specific number of bytes"""
-        tf = TransFile(self.testfileR,self.f_noop,"r")
+        tf = Translate(self.testfileR,self.f_noop,"r")
         self.assert_(tf.read(10) == "".join(self.testlines)[:10])
         
     def test_readlines(self):
         """Test reading lines one at a time."""
-        tf = TransFile(self.testfileR,self.f_noop,"r")
+        tf = Translate(self.testfileR,self.f_noop,"r")
         self.assert_(tf.readlines() == self.testlines)
     
     def test_write(self):
         """Test basic behavior of writing to a file."""
-        tf = TransFile(self.testfileW,self.f_noop,"w")
+        tf = Translate(self.testfileW,self.f_noop,"w")
         tf.write("".join(self.testlines))
         self.assert_(self.testfileW.getvalue() == "".join(self.testlines))
     
     def test_writelines(self):
         """Test writing several lines with writelines()."""
-        tf = TransFile(self.testfileW,self.f_noop,"w")
+        tf = Translate(self.testfileW,self.f_noop,"w")
         tf.writelines(self.testlines)
         self.assert_(self.testfileW.getvalue() == "".join(self.testlines))
         
 
-class FixedBlockSizeFile(FileWrapper):
+class FixedBlockSize(FileWrapper):
     """Class reading/writing to files at a fixed block size.
     
     This file wrapper can be used to read or write to a file-like
@@ -325,9 +334,10 @@ class FixedBlockSizeFile(FileWrapper):
         self._fileobj.write(data[:size])
         return data[size:]
 
+_deprecate("FixedBlockSizeFile",FixedBlockSize)
 
 
-class Test_FixedBlockSizeFile(unittest.TestCase):
+class Test_FixedBlockSize(unittest.TestCase):
     """Testcases for the FixedBlockSize class."""
     
     def setUp(self):
@@ -348,18 +358,18 @@ class Test_FixedBlockSizeFile(unittest.TestCase):
 
     def test_readbytes(self):
         """Test reading different numbers of bytes"""
-        bsf = FixedBlockSizeFile(self.BSFile(8),8)
+        bsf = FixedBlockSize(self.BSFile(8),8)
         self.assert_(len(bsf.read(5)) == 5)
         self.assert_(len(bsf.read(8)) == 8)
         self.assert_(len(bsf.read(76)) == 76)
-        bsf = FixedBlockSizeFile(self.BSFile(5),5)
+        bsf = FixedBlockSize(self.BSFile(5),5)
         self.assert_(len(bsf.read(5)) == 5)
         self.assert_(len(bsf.read(8)) == 8)
         self.assert_(len(bsf.read(76)) == 76)
             
     def test_write(self):
         """Test writing different numbers of bytes"""
-        bsf = FixedBlockSizeFile(self.BSFile(8),8)
+        bsf = FixedBlockSize(self.BSFile(8),8)
         bsf.write("this is some text, it is")
         bsf.write("shrt")
         bsf.flush()
@@ -367,67 +377,115 @@ class Test_FixedBlockSizeFile(unittest.TestCase):
         bsf.close() 
 
 
-class PaddedToBlockSizeFile(FileWrapper):
+class PadToBlockSize(FileWrapper):
     """Class padding files to a fixed block size.
     
     This file wrapper can be used to pad a file to a specific block size.
-    If the total data written to the file when it is flushed or closed
-    is not a multiple of the blocksize, it will be padded to the
-    appropriate size by writing the following data:
-    
-        * Two null bytes
-        * "PaddedToBlockSizeFile"
-        * Enough null bytes to fit the block size
-        
-    This data is removed from the end of the file if it is encoutered
-    upon reading.
-    
-    No guarantee is made that reads or writes are requested at the
-    blocksize - use FixedBlockSizeFile to achieve this.
+    The file data is followed by a 'Z', then as many 'X' bytes as needed
+    to meet the block size.  This is automatically added when reading,
+    and stripped when writing.  The dual of this class is UnPadToBlockSize.
+
+    No guarantee is made that reads or writes are requsted at the
+    blocksize - use FixedBlockSize to achieve this.
     """
-    
-    _padstr = "\0\0PaddedToBlockSizeFile"
-    
+
     def __init__(self,fileobj,blocksize,mode=None):
         FileWrapper.__init__(self,fileobj,mode)
-        self._blocksize = blocksize
-        self._maxpadlen = len(self._padstr) + blocksize-1
-        self._padwritten = False
+        self.blocksize = blocksize
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
-        nm = ((num/self._blocksize)+1) * self._blocksize
-        if nm == num + self._blocksize:
+        nm = ((num/self.blocksize)+1) * self.blocksize
+        if nm == num + self.blocksize:
             return num
         return nm
     
     def _round_down(self,num):
         """Round <num> down to a multiple of the block size."""
-        return (num/self._blocksize) * self._blocksize
+        return (num/self.blocksize) * self.blocksize
     
     def _pad_to_size(self,data):
         """Pad data to make it an appropriate size."""
-        data = data + self._padstr
+        data = data + "Z"
         size = self._round_up(len(data))
         if len(data) < size:
-            data = data + ("\0"*(size-len(data)))
+            data = data + ("X"*(size-len(data)))
+        return data
+
+    def _read(self,sizehint):
+        data = self._fileobj.read(sizehint)
+        if sizehint <= 0 or len(data) < sizehint:
+            data = self._pad_to_size(data)
+        return data
+
+    def _write(self,string,flushing=False):
+        idx = string.rfind("Z")
+        if idx < 0 or idx < (len(string) - self.blocksize - 1):
+            if flushing:
+                raise ValueError("PadToBlockSize: no padding found in file.")
+            self._fileobj.write(string)
+            return None
+        s2 = string[:idx]
+        self._fileobj.write(s2)
+        if flushing:
+            return None
+        return string[idx:]
+        
+
+class UnPadToBlockSize(FileWrapper):
+    """Class removing block-size padding from a file.
+    
+    This file wrapper can be used to reverse the effects of PadToBlockSize,
+    removing extraneous padding data when reading, and adding it back in
+    when writing.
+    """
+    
+    def __init__(self,fileobj,blocksize,mode=None):
+        FileWrapper.__init__(self,fileobj,mode)
+        self.blocksize = blocksize
+        self._padwritten = False
+        self._padread = False
+    
+    def _round_up(self,num):
+        """Round <num> up to a multiple of the block size."""
+        nm = ((num/self.blocksize)+1) * self.blocksize
+        if nm == num + self.blocksize:
+            return num
+        return nm
+    
+    def _round_down(self,num):
+        """Round <num> down to a multiple of the block size."""
+        return (num/self.blocksize) * self.blocksize
+    
+    def _pad_to_size(self,data):
+        """Pad data to make it an appropriate size."""
+        data = data + "Z"
+        size = self._round_up(len(data))
+        if len(data) < size:
+            data = data + ("X"*(size-len(data)))
         return data
     
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
+        if self._padread:
+            return None
         data = self._fileobj.read(sizehint)
-        # If we might be near the end, read far enough ahead to see
-        while "\0" in data[-1*self._maxpadlen:]:
-            newData = self._fileobj.read(self._maxpadlen)
+        # If we might be near the end, read far enough ahead to find the pad
+        idx = data.rfind("Z")
+        while idx > 0 and idx > (len(data) - self.blocksize - 1):
+            newData = self._fileobj.read(self.blocksize)
             data = data + newData
-            idx = data.rfind(self._padstr)
-            if idx != -1:
-                data = data[:idx]
-                break
+            idx = data.rfind("Z")
             if newData == "":
                 break
         if data == "":
-            return None
+            raise ValueError("UnPadToBlockSize: no padding found in file.")
+        if idx == -1:
+            return data
+        data = data[:idx]
+        self._padread = True
+        if data == "":
+            data = None
         return data
 
     def _write(self,data,flushing=False):
@@ -452,15 +510,17 @@ class PaddedToBlockSizeFile(FileWrapper):
         if not self._padwritten:
             self._write("",flushing=True)
 
+_deprecate("PaddedToBlockSizeFile",UnPadToBlockSize)
 
-class Test_PaddedToBlockSizeFile(unittest.TestCase):
-    """Testcases for the PaddedToBlockSizeFile class."""
+
+class Test_PadToBlockSize(unittest.TestCase):
+    """Testcases for the [Un]PadToBlockSize class."""
     
     def setUp(self):
         import StringIO
         self.textin = "this is sample text"
-        self.textout5 = "this is sample text\0\0PaddedToBlockSizeFile\0\0\0"
-        self.textout7 = "this is sample text\0\0PaddedToBlockSizeFile"
+        self.textout5 = "this is sample textZ"
+        self.textout7 = "this is sample textZX"
         self.outfile = StringIO.StringIO()
     
     def tearDown(self):
@@ -468,65 +528,73 @@ class Test_PaddedToBlockSizeFile(unittest.TestCase):
 
     def test_write5(self):
         """Test writing at blocksize=5"""
-        bsf = PaddedToBlockSizeFile(self.outfile,5,mode="w")
+        bsf = UnPadToBlockSize(self.outfile,5,mode="w")
         bsf.write(self.textin)
         bsf.flush()
         self.assertEquals(self.outfile.getvalue(),self.textout5)
+        self.outfile = StringIO.StringIO()
+        bsf = PadToBlockSize(self.outfile,5,mode="w")
+        bsf.write(self.textout5)
+        bsf.flush()
+        self.assertEquals(self.outfile.getvalue(),self.textin)
 
     def test_write7(self):
         """Test writing at blocksize=7"""
-        bsf = PaddedToBlockSizeFile(self.outfile,7,mode="w")
+        bsf = UnPadToBlockSize(self.outfile,7,mode="w")
         bsf.write(self.textin)
         bsf.flush()
         self.assertEquals(self.outfile.getvalue(),self.textout7)
+        self.outfile = StringIO.StringIO()
+        bsf = PadToBlockSize(self.outfile,7,mode="w")
+        bsf.write(self.textout7)
+        bsf.flush()
+        self.assertEquals(self.outfile.getvalue(),self.textin)
     
     def test_read5(self):
         """Test reading at blocksize=5"""
         inf = StringIO.StringIO(self.textout5)
-        bsf = PaddedToBlockSizeFile(inf,5,mode="r")
+        bsf = UnPadToBlockSize(inf,5,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
         
     def test_read7(self):
         """Test reading at blocksize=7"""
         inf = StringIO.StringIO(self.textout7)
-        bsf = PaddedToBlockSizeFile(inf,7,mode="r")
+        bsf = UnPadToBlockSize(inf,7,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
 
 
-
-
-class DecryptFile(FileWrapper):
+class Decrypt(FileWrapper):
     """Class for reading and writing to an encrypted file.
     
     This class accesses an encrypted file using a ciphering object
     compliant with PEP272: "API for Block Encryption Algorithms".
     All reads from the file are automatically decrypted, while writes
-    to the file and automatically encrypted.  Thus, DecryptFile(fobj)
+    to the file and automatically encrypted.  Thus, Decrypt(fobj)
     can be seen as the decrypted version of the file-like object fobj.
     
-    Because this class is implemented on top of FixedBlockSizeFile,
+    Because this class is implemented on top of FixedBlockSize,
     the plaintext may be padded with null characters to reach a multiple
-    of the block size.
+    of the block size.  If this is not desired, wrap it in PadToBlockSize.
     
-    There is a dual class, EncryptFile, where all reads are encrypted
+    There is a dual class, Encrypt, where all reads are encrypted
     and all writes are decrypted.  This would be used, for example, to
     encrypt the contents of an existing file using a series of read()
     operations.
     """
 
     def __init__(self,fileobj,cipher,mode=None):
-        """DecryptFile Constructor.
+        """Decrypt Constructor.
         <fileobj> is the file object with encrypted contents, and <cipher>
         is the cipher object to be used.  Other arguments are passed through
         to FileWrapper.__init__
         """
         self.__cipher = cipher
-        myFileObj = TransFile(fileobj,mode=mode,
+        myFileObj = Translate(fileobj,mode=mode,
                                       rfunc=cipher.decrypt,
                                       wfunc=cipher.encrypt)
-        myFileObj = FixedBlockSizeFile(myFileObj,cipher.block_size)
+        myFileObj = FixedBlockSize(myFileObj,cipher.block_size)
         FileWrapper.__init__(self,myFileObj)
 
     def setCipher(self,cipher):
@@ -535,36 +603,38 @@ class DecryptFile(FileWrapper):
         self._rfunc = cipher.decrypt
         self._wfunc = cipher.encrypt
 
-class EncryptFile(FileWrapper):
+_deprecate("DecryptFile",Decrypt)
+
+class Encrypt(FileWrapper):
     """Class for reading and writing to an decrypted file.
     
     This class accesses a decrypted file using a ciphering object
     compliant with PEP272: "API for Block Encryption Algorithms".
     All reads from the file are automatically encrypted, while writes
-    to the file are automatically decrypted.  Thus, EncryptFile(fobj)
+    to the file are automatically decrypted.  Thus, Encrypt(fobj)
     can be seen as the encrypted version of the file-like object fobj.
 
-    Because this class is implemented on top of FixedBlockSizeFile,
+    Because this class is implemented on top of FixedBlockSize,
     the plaintext may be padded with null characters to reach a multiple
-    of the block size.
+    of the block size.  If this is not desired, wrap it in PadToBlockSize.
     
-    There is a dual class, DecryptFile, where all reads are decrypted
+    There is a dual class, Decrypt, where all reads are decrypted
     and all writes are encrypted.  This would be used, for example, to
     decrypt the contents of an existing file using a series of read()
     operations.
     """
 
     def __init__(self,fileobj,cipher,mode=None):
-        """EncryptFile Constructor.
+        """Encrypt Constructor.
         <fileobj> is the file object with decrypted contents, and <cipher>
         is the cipher object to be used.  Other arguments are passed through
         to FileWrapper.__init__
         """
         self.__cipher = cipher
-        myFileObj = TransFile(fileobj,mode=mode,
+        myFileObj = Translate(fileobj,mode=mode,
                                       rfunc=self.__encrypt,
                                       wfunc=cipher.decrypt)
-        myFileObj = FixedBlockSizeFile(myFileObj,cipher.block_size)
+        myFileObj = FixedBlockSize(myFileObj,cipher.block_size)
         FileWrapper.__init__(self,myFileObj)
 
     def setCipher(self,cipher):
@@ -582,9 +652,11 @@ class EncryptFile(FileWrapper):
             data = self._fileobj._pad_to_size(data)
         return self.__cipher.encrypt(data)
 
+_deprecate("EncryptFile",Encrypt)
+
 
 class Test_CryptFiles(unittest.TestCase):
-    """Testcases for the (En/De)cryptFile classes."""
+    """Testcases for the (En/De)Crypt classes."""
     
     def setUp(self):
         import StringIO
@@ -603,24 +675,24 @@ class Test_CryptFiles(unittest.TestCase):
 
     def test_ReadDecrypt(self):
         """Test reading from an encrypted file."""
-        df = DecryptFile(self.cryptfile,self.cipher,"r")
+        df = Decrypt(self.cryptfile,self.cipher,"r")
         self.assert_(df.read() == self.plaintextout)
 
     def test_ReadEncrypt(self):
         """Test reading from a decrypted file."""
-        ef = EncryptFile(self.plainfile,self.cipher,"r")
+        ef = Encrypt(self.plainfile,self.cipher,"r")
         self.assert_(ef.read() == self.ciphertext)
     
     def test_WriteDecrypt(self):
         """Test writing to an encrypted file."""
-        df = DecryptFile(self.outfile,self.cipher,"w")
+        df = Decrypt(self.outfile,self.cipher,"w")
         df.write(self.plaintextin)
         df.flush()
         self.assert_(self.outfile.getvalue() == self.ciphertext)
         
     def test_WriteEncrypt(self):
         """Test writing to a decrypted file."""
-        ef = EncryptFile(self.outfile,self.cipher,"w")
+        ef = Encrypt(self.outfile,self.cipher,"w")
         ef.write(self.ciphertext)
         self.assert_(self.outfile.getvalue() == self.plaintextout)
 
@@ -710,8 +782,6 @@ class Test_Head(unittest.TestCase):
     """Testcases for the Head wrapper class."""
     
     def setUp(self):
-        from Crypto.Cipher import DES
-        # Example inspired by the PyCrypto manual
         self.intext = "Guido van Rossum\n is a space\n alien."
         self.infile = StringIO.StringIO(self.intext)
         self.outfile = StringIO.StringIO()
@@ -847,7 +917,7 @@ class Cat(FileWrapper):
         return data
     
     def _write(self,data):
-        raise IOError("Cat wrappers cannot be written to.")
+        raise IOError("Cat wrapper cannot be written to.")
 
 
 class Test_Cat(unittest.TestCase):
@@ -872,33 +942,33 @@ class Test_Cat(unittest.TestCase):
         self.assertEquals(txt,txtC)
 
 
-class CompressFile(TransFile):
+class Compress(Translate):
     """Compress a file using an arbitrary compression routine.
 
     All reads from the file are processed using self._compress, while
-    all writes are passed through self._decompress.  Thus CompressFile(fobj)
+    all writes are passed through self._decompress.  Thus Compress(fobj)
     can be seen as the compressed version of fobj.
 
     Subclasses must implement _compress and _decompress.
     """
 
     def __init__(self,fileobj,mode=None):
-        TransFile.__init__(self,fileobj,mode=mode,
+        Translate.__init__(self,fileobj,mode=mode,
                            rfunc=self._compress,
                            wfunc=self._decompress)
 
-class DecompressFile(TransFile):
+class UnCompress(Translate):
     """Decompress a file using an arbitrary compression routine.
 
     All reads from the file are processed using self._decompress, while
-    all writes are passed through self._compress.  Thus DecompressFile(fobj)
+    all writes are passed through self._compress.  Thus UnCompress(fobj)
     can be seen as the decompressed version of fobj.
 
     Subclasses must implement _compress and _decompress.
     """
 
     def __init__(self,fileobj,mode=None):
-        TransFile.__init__(self,fileobj,mode=mode,
+        Translate.__init__(self,fileobj,mode=mode,
                            rfunc=self._decompress,
                            wfunc=self._compress)
 
@@ -945,7 +1015,7 @@ try:
             self._decompress = dfunc
 
 
-    class BZ2File(BZ2Wrapper,DecompressFile):
+    class BZip2(BZ2Wrapper,UnCompress):
         """Class for reading and writing to a bziped file.
         
         This class behaves almost exactly like the bz2.BZ2File class from
@@ -954,152 +1024,54 @@ try:
         """
     
         def __init__(self,fileobj,mode=None,compresslevel=9):
-            """BZ2File Constructor.
+            """BZip2 Constructor.
 
             <fileobj> is the file object with compressed contents.  <mode>
             is the file access mode. <compresslevel> an integer between 1
             and 9 giving the compression level.
             """
             BZ2Wrapper.__init__(self,compresslevel)
-            DecompressFile.__init__(self,fileobj,mode)
+            UnCompress.__init__(self,fileobj,mode)
 
-    class UnBZ2File(BZ2Wrapper,CompressFile):
+    class UnBZip2(BZ2Wrapper,Compress):
         """Class for reading and writing to a un-bziped file.
         
-        This class is the dual of BZ2File - it compresses read data, and
+        This class is the dual of BZip2 - it compresses read data, and
         decompresses written data.
         """
     
         def __init__(self,fileobj,mode=None,compresslevel=9):
-            """UnBZ2File Constructor.
+            """UnBZip2 Constructor.
 
             <fileobj> is the file object with compressed contents.  <mode>
             is the file access mode. <compresslevel> an integer between 1
             and 9 giving the compression level.
             """
             BZ2Wrapper.__init__(self,compresslevel)
-            CompressFile.__init__(self,fileobj,mode)
+            Compress.__init__(self,fileobj,mode)
     
 
     ##  Add handling of .bz2 files to filelike.open()
-    def _BZ2File_decoder(fileobj):
+    def _BZip2_decoder(fileobj):
         """Decoder function for handling .bz2 files with filelike.open"""
         if not fileobj.name.endswith(".bz2"):
             return None
         if "a" in fileobj.mode:
             raise IOError("Cannot open .bz2 files in append mode")
-        f = BZ2File(fileobj)
+        f = BZip2(fileobj)
         f.name = fileobj.name[:-4]
         return f
-    filelike.open.decoders.append(_BZ2File_decoder)
+    filelike.open.decoders.append(_BZip2_decoder)
     
 except ImportError:
     pass
 
 
 ## Conditionally provide gzip compression support
-# TODO: GzipWrapper not working, it's much more complicated than I imagined
+# TODO: understand zlib, implement own version similar to bz2 support
 try:
-    import zlib
-    class GzipWrapper:
-        """Mixin for wrapping files with gzip [de]compression.
-
-        This class sets up _compress and _decompress as appropriate for
-        gzip handling.  It should be mixed-in with one of CompressFile or
-        DecompressFile, with GzipWrapper.__init__ called first.
-        """
-
-        def __init__(self,compresslevel=9):
-            """GzipWrapper Constructor.
-
-            <fileobj> is the file object with compressed contents.  <mode>
-            is the file access mode. <compresslevel> an integer between 1
-            and 9 giving the compression level.
-            
-            This does not support simultaneous reading and writing of a gzip
-            wrapped file, so mode must be either 'r' or 'w'.
-            """
-            # Create self._compress to handle compression
-            compressor = zlib.compressobj(compresslevel)
-            toFlush = {'c': False, 'd': False}
-            def cfunc(data):
-                data = compressor.compress(data)
-                toFlush['c'] = True
-                return data
-            def cflush():
-                if not toFlush['c']:
-                  return None
-                data = compressor.flush()
-                if data == "":
-                  data = None
-                del cfunc.flush
-                return data
-            cfunc.flush = cflush
-            self._compress = cfunc
-            # Create self._decompress to handle decompression
-            decompressor = zlib.decompressobj()
-            def dfunc(data):
-                data = decompressor.decompress(data)
-                toFlush['d'] = True
-                return data
-            def dflush():
-                if not toFlush['d']:
-                  return None
-                data = compressor.flush()
-                if data == "":
-                  data = None
-                del dfunc.flush
-                return data
-            dfunc.flush = dflush
-            self._decompress = dfunc
-
-
-    class GzipFile(GzipWrapper,DecompressFile):
-        """Class for reading and writing to a bziped file.
-        
-        This class behaves almost exactly like the gzip.GzipFile class from
-        the standard library.
-        """
-    
-        def __init__(self,fileobj,mode=None,compresslevel=9):
-            """GzipFile Constructor.
-
-            <fileobj> is the file object with compressed contents.  <mode>
-            is the file access mode. <compresslevel> an integer between 1
-            and 9 giving the compression level.
-            """
-            GzipWrapper.__init__(self,compresslevel)
-            DecompressFile.__init__(self,fileobj,mode)
-
-    class UnGzipFile(GzipWrapper,CompressFile):
-        """Class for reading and writing to a un-gziped file.
-        
-        This class is the dual of GzipFile - it compresses read data, and
-        decompresses written data.
-        """
-    
-        def __init__(self,fileobj,mode=None,compresslevel=9):
-            """UnGzipFile Constructor.
-
-            <fileobj> is the file object with compressed contents.  <mode>
-            is the file access mode. <compresslevel> an integer between 1
-            and 9 giving the compression level.
-            """
-            GzipWrapper.__init__(self,compresslevel)
-            CompressFile.__init__(self,fileobj,mode)
-    
-    ##  Add handling of .gz files to filelike.open()
-    def _GzipFile_decoder(fileobj):
-        """Decoder function for handling .gz files with filelike.open"""
-        if not fileobj.name.endswith(".gz"):
-            return None
-        if "a" in fileobj.mode:
-            raise IOError("Cannot open .gz files in append mode")
-        f = GzipFile(fileobj)
-        f.name = fileobj.name[:-3]
-        return f
-    filelike.open.decoders.append(_GzipFile_decoder)
-    
+    import gzip
+    Gzip = gzip.GzipFile
 except ImportError:
     pass
 
@@ -1129,14 +1101,11 @@ class Test_OpenerDecoders(unittest.TestCase):
         self.assertEquals(f.read(),"content goes here if you please.\n")
 
 class Test_Compression(unittest.TestCase):
-    """Testcases for the filelike.Opener decoder functions."""
+    """Testcases for the various compression wrappers."""
     
     def setUp(self):
         self.raw1 = "hello world I am raw text"
         self.bz1 = bz2.compress(self.raw1)
-        gc = zlib.compressobj()
-        self.gz1 = gc.compress(self.raw1)
-        self.gz1 += gc.flush()
 
     def tearDown(self):
         pass
@@ -1151,35 +1120,26 @@ class Test_Compression(unittest.TestCase):
         f.flush()
         self.assertEquals(f._fileobj.getvalue(),dataOut)
 
-    def test_BZ2File(self):
-        """Test operation of BZ2File."""
-        self._test_rw(BZ2File,self.raw1,self.bz1)
+    def test_BZip2(self):
+        """Test operation of BZip2."""
+        self._test_rw(BZip2,self.raw1,self.bz1)
 
-    def test_UnBZ2File(self):
-        """Test operation of UnBZ2File."""
-        self._test_rw(UnBZ2File,self.bz1,self.raw1)
-
-    def test_GzipFile(self):
-        """Test operation of GzipFile."""
-        self._test_rw(GzipFile,self.raw1,self.gz1)
-
-    def test_UnGzipFile(self):
-        """Test operation of UnGzipFile."""
-        self._test_rw(UnGzipFile,self.gz1,self.raw1)
-    
+    def test_UnBZip2(self):
+        """Test operation of UnBZip2."""
+        self._test_rw(UnBZip2,self.bz1,self.raw1)
 
 
 def testsuite():
     suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_TransFile))
-    suite.addTest(unittest.makeSuite(Test_FixedBlockSizeFile))
+    suite.addTest(unittest.makeSuite(Test_Translate))
+    suite.addTest(unittest.makeSuite(Test_FixedBlockSize))
     suite.addTest(unittest.makeSuite(Test_CryptFiles))
     suite.addTest(unittest.makeSuite(Test_Head))
-    suite.addTest(unittest.makeSuite(Test_PaddedToBlockSizeFile))
+    suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
     suite.addTest(unittest.makeSuite(Test_Cat))
     suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
     try:
-      if bz2 and zlib:
+      if bz2:
         suite.addTest(unittest.makeSuite(Test_Compression))
     except NameError:
       pass

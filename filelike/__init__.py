@@ -36,25 +36,25 @@ Two methods are provided for when code expects to deal with file-like objects:
 The "wrappers" subpackage contains a collection of useful classes built on
 top of this framework.  These include:
     
-    * TransFile:  pass file contents through an arbitrary translation
+    * Translate:  pass file contents through an arbitrary translation
                   function (e.g. compression, encryption, ...)
                   
-    * FixedBlockSizeFile:  ensure all read/write requests are aligned with
-                           a given blocksize
+    * FixedBlockSize:  ensure all read/write requests are aligned with
+                       a given blocksize
                            
-    * DecryptFile:    on-the-fly reading and writing to an encrypted file
-                      (using PEP272 cipher API)
+    * Decrypt:    on-the-fly reading and writing to an encrypted file
+                  (using PEP272 cipher API)
 
 As an example of the type of thing this module is designed to achieve, here's
-an example of using the DecryptFile class to transparently access an encrypted
+an example of using the Decrypt wrapper to transparently access an encrypted
 file:
     
     # Create the decryption key
     from Crypto.Cipher import DES
     cipher = DES.new('abcdefgh',DES.MODE_ECB)
     # Open the encrypted file
-    from filelike.wrappers import DecryptFile
-    f = DecryptFile(file("some_encrypted_file.bin","r"),cipher)
+    from filelike.wrappers import Decrypt
+    f = Decrypt(file("some_encrypted_file.bin","r"),cipher)
     
 The object in <f> now behaves as a file-like object, transparently decrypting
 the file on-the-fly as it is read.
@@ -63,19 +63,17 @@ The "pipeline" subpackage contains facilities for composing these wrappers
 in the form of a unix pipeline.  In this example, <f> will read the
 first five lines of an encrypted file:
     
-    from filelike.pipeline import DecryptFile, Head
-    f = file("some_encrypted_file.bin") > DecryptFile(cipher) | Head(lines=5)
-
+    from filelike.pipeline import Decrypt, Head
+    f = file("some_encrypted_file.bin") > Decrypt(cipher) | Head(lines=5)
 
 Finally, the function filelike.open() mirrors the standard file opening function
 but tries to be clever about accessing the file - URLs are automatically fetched
 using urllib2, compressed files are decompressed on-the-fly, and so-forth.
-
 """ 
 
 __ver_major__ = 0
-__ver_minor__ = 2
-__ver_patch__ = 2
+__ver_minor__ = 3
+__ver_patch__ = 0
 __ver_sub__ = ""
 __version__ = "%d.%d.%d%s" % (__ver_major__,__ver_minor__,
                               __ver_patch__,__ver_sub__)

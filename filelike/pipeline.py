@@ -22,7 +22,7 @@ wrappers to be used, use pipeline() on the class:
 
 As an example, here's how to print the first 20 lines of an encrypted file:
     
-    for ln in file("enc_file.bin","r") > DecryptFile(key) | Head(lines=20)
+    for ln in file("enc_file.bin","r") > Decrypt(key) | Head(lines=20)
         print ln
 
 Some folks would say this aids readability when using long combinations of
@@ -221,13 +221,13 @@ class Test_Pipeline(unittest.TestCase):
 
     def test_ReaderLine(self):
         """Test a simple reading pipeline."""
-        pf = self.ciphertext > DecryptFile(self.cipher) | Head(bytes=10)
+        pf = self.ciphertext > Decrypt(self.cipher) | Head(bytes=10)
         txt = pf.read()
         self.assertEquals(txt,self.plaintextout[:10])
 
     def test_WriterLine(self):
         """Test a simple writer pipeline."""
-        pf = DecryptFile(self.cipher) | Head(bytes=15) | FixedBlockSizeFile(10) > self.outfile
+        pf = Decrypt(self.cipher) | Head(bytes=15) | FixedBlockSize(10) > self.outfile
         pf.write(self.plaintextin)
         pf.flush()
         txt = self.outfile.getvalue()
