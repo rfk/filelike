@@ -26,7 +26,7 @@ As an example, here's how to print the first 20 lines of an encrypted file:
         print ln
 
 Some folks would say this aids readability when using long combinations of
-wrappers.  A lot would probably all it a horrible abuse of operator semantics.
+wrappers.  A lot would probably call it a horrible abuse of operator semantics.
 Mostly I consider it a fun hack.
 
 The following pipline operators are supported:

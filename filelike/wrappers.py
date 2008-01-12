@@ -1015,7 +1015,7 @@ try:
             self._decompress = dfunc
 
 
-    class BZip2(BZ2Wrapper,UnCompress):
+    class BZip2(BZ2Wrapper,Compress):
         """Class for reading and writing to a bziped file.
         
         This class behaves almost exactly like the bz2.BZ2File class from
@@ -1031,9 +1031,9 @@ try:
             and 9 giving the compression level.
             """
             BZ2Wrapper.__init__(self,compresslevel)
-            UnCompress.__init__(self,fileobj,mode)
+            Compress.__init__(self,fileobj,mode)
 
-    class UnBZip2(BZ2Wrapper,Compress):
+    class UnBZip2(BZ2Wrapper,UnCompress):
         """Class for reading and writing to a un-bziped file.
         
         This class is the dual of BZip2 - it compresses read data, and
@@ -1048,8 +1048,9 @@ try:
             and 9 giving the compression level.
             """
             BZ2Wrapper.__init__(self,compresslevel)
-            Compress.__init__(self,fileobj,mode)
+            UnCompress.__init__(self,fileobj,mode)
     
+    _deprecate("BZ2File","UnBZip2")
 
     ##  Add handling of .bz2 files to filelike.open()
     def _BZip2_decoder(fileobj):
@@ -1058,7 +1059,7 @@ try:
             return None
         if "a" in fileobj.mode:
             raise IOError("Cannot open .bz2 files in append mode")
-        f = BZip2(fileobj)
+        f = UnBZip2(fileobj)
         f.name = fileobj.name[:-4]
         return f
     filelike.open.decoders.append(_BZip2_decoder)
