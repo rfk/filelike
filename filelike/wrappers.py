@@ -564,6 +564,22 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf = UnPadToBlockSize(inf,5,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
+
+        inf = StringIO.StringIO(self.textout5)
+        bsf = UnPadToBlockSize(inf,5,mode="r")
+        self.assertEquals(bsf.read(1),self.textin[0])
+        self.assertEquals(bsf.read(1),self.textin[1])
+
+        inf = StringIO.StringIO(self.textin)
+        bsf = PadToBlockSize(inf,5,mode="r")
+        txt = bsf.read()
+        self.assertEquals(txt,self.textout5)
+
+        inf = StringIO.StringIO(self.textin)
+        bsf = PadToBlockSize(inf,5,mode="r")
+        self.assertEquals(bsf.read(1),self.textout5[0])
+        self.assertEquals(bsf.read(1),self.textout5[1])
+        
         
     def test_read7(self):
         """Test reading at blocksize=7"""
@@ -571,6 +587,21 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf = UnPadToBlockSize(inf,7,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
+
+        inf = StringIO.StringIO(self.textout7)
+        bsf = UnPadToBlockSize(inf,7,mode="r")
+        self.assertEquals(bsf.read(1),self.textin[0])
+        self.assertEquals(bsf.read(1),self.textin[1])
+
+        inf = StringIO.StringIO(self.textin)
+        bsf = PadToBlockSize(inf,7,mode="r")
+        txt = bsf.read()
+        self.assertEquals(txt,self.textout7)
+
+        inf = StringIO.StringIO(self.textin)
+        bsf = PadToBlockSize(inf,7,mode="r")
+        self.assertEquals(bsf.read(1),self.textout7[0])
+        self.assertEquals(bsf.read(1),self.textout7[1])
 
 
 class Decrypt(FileWrapper):
@@ -686,10 +717,22 @@ class Test_CryptFiles(unittest.TestCase):
         df = Decrypt(self.cryptfile,self.cipher,"r")
         self.assert_(df.read() == self.plaintextout)
 
+    def test_Read1Decrypt(self):
+        """Test reading one byte from an encrypted file."""
+        df = Decrypt(self.cryptfile,self.cipher,"r")
+        self.assertEquals(df.read(1),self.plaintextout[0])
+        self.assertEquals(df.read(1),self.plaintextout[1])
+
     def test_ReadEncrypt(self):
         """Test reading from a decrypted file."""
         ef = Encrypt(self.plainfile,self.cipher,"r")
         self.assert_(ef.read() == self.ciphertext)
+
+    def test_Read1Encrypt(self):
+        """Test reading one bytes from a decrypted file."""
+        ef = Encrypt(self.plainfile,self.cipher,"r")
+        self.assertEquals(ef.read(1),self.ciphertext[0])
+        self.assertEquals(ef.read(1),self.ciphertext[1])
     
     def test_WriteDecrypt(self):
         """Test writing to an encrypted file."""
@@ -1109,6 +1152,7 @@ class Test_OpenerDecoders(unittest.TestCase):
         f = filelike.open("http://www.rfk.id.au/scratch/test.txt.bz2")
         self.assertEquals(f.read(),"content goes here if you please.\n")
 
+
 class Test_Compression(unittest.TestCase):
     """Testcases for the various compression wrappers."""
     
@@ -1129,37 +1173,23 @@ class Test_Compression(unittest.TestCase):
         f.flush()
         self.assertEquals(f._fileobj.getvalue(),dataOut)
 
+    def _test_readone(self,cls,dataIn,dataOut):
+        f = cls(StringIO.StringIO(dataOut),'r')
+        c = f.read(1)
+        self.assertEquals(c,dataIn[0])
+        c = f.read(1)
+        self.assertEquals(c,dataIn[1])
+
     def test_BZip2(self):
         """Test operation of BZip2."""
-        self._test_rw(BZip2,self.raw1,self.bz1)
+        self._test_rw(BZip2,self.bz1,self.raw1)
+        self._test_readone(BZip2,self.bz1,self.raw1)
 
     def test_UnBZip2(self):
         """Test operation of UnBZip2."""
-        self._test_rw(UnBZip2,self.bz1,self.raw1)
+        self._test_rw(UnBZip2,self.raw1,self.bz1)
+        self._test_readone(UnBZip2,self.raw1,self.bz1)
 
-
-class Test_ReadOne(unittest.TestCase):
-    """Testcases for reading small amounts from each wrapper."""
-    
-    def setUp(self):
-        self.text = "hi there"
-        self.infile = StringIO.StringIO(self.text)
-
-    def tearDown(self):
-        pass
-
-    def test_ReadOne(self):
-        """Test reading one byte from each wrapper."""
-        g = globals()
-        for nm in g:
-          cls = g[nm]
-          if isinstance(cls,FileWrapper):
-            f = cls(self.infile)
-            b1 = f.read(1)
-            b2 = f.read(1)
-            self.assertEquals(b1,"h")
-            self.assertEquals(b2,"i")
-            self.infile.seek(0)
 
 
 def testsuite():
@@ -1171,7 +1201,6 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
     suite.addTest(unittest.makeSuite(Test_Cat))
     suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
-    suite.addTest(unittest.makeSuite(Test_ReadOne))
     try:
       if bz2:
         suite.addTest(unittest.makeSuite(Test_Compression))
