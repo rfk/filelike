@@ -428,7 +428,7 @@ class PadToBlockSize(FileWrapper):
 
     def _write(self,string,flushing=False):
         idx = string.rfind("Z")
-        if idx < 0 or idx < (len(string) - self.blocksize - 1):
+        if idx < 0 or idx < (len(string) - self.blocksize):
             if flushing:
                 raise ValueError("PadToBlockSize: no padding found in file.")
             self._fileobj.write(string)
@@ -480,7 +480,7 @@ class UnPadToBlockSize(FileWrapper):
         data = self._fileobj.read(sizehint)
         # If we might be near the end, read far enough ahead to find the pad
         idx = data.rfind("Z")
-        while idx > 0 and idx > (len(data) - self.blocksize - 1):
+        while idx >= 0 and idx > (len(data) - self.blocksize):
             newData = self._fileobj.read(self.blocksize)
             data = data + newData
             idx = data.rfind("Z")
@@ -488,7 +488,7 @@ class UnPadToBlockSize(FileWrapper):
                 break
         if data == "":
             raise ValueError("UnPadToBlockSize: no padding found in file.")
-        if idx == -1:
+        if idx < 0 or idx <= (len(data) - self.blocksize):
             return data
         data = data[:idx]
         self._padread = True
@@ -526,9 +526,9 @@ class Test_PadToBlockSize(unittest.TestCase):
     
     def setUp(self):
         import StringIO
-        self.textin = "this is sample text"
-        self.textout5 = "this is sample textZ"
-        self.textout7 = "this is sample textZX"
+        self.textin = "Zhis is sample text"
+        self.textout5 = "Zhis is sample textZ"
+        self.textout7 = "Zhis is sample textZX"
         self.outfile = StringIO.StringIO()
     
     def tearDown(self):
