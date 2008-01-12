@@ -1148,7 +1148,7 @@ class Test_ReadOne(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def _test_readone(self,cls,dataIn,dataOut):
+    def test_ReadOne(self):
         """Test reading one byte from each wrapper."""
         g = globals()
         for nm in g:
