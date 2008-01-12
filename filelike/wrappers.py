@@ -209,6 +209,8 @@ class Translate(FileWrapper):
         data = self._fileobj.read(sizehint)
         if data != "":
             tData = self._rfunc(data)
+        else:
+            tData = data
         if sizehint <= 0 or len(data) < sizehint:
             self._finished = True
             # Flush func if necessary
@@ -392,6 +394,7 @@ class PadToBlockSize(FileWrapper):
     def __init__(self,fileobj,blocksize,mode=None):
         FileWrapper.__init__(self,fileobj,mode)
         self.blocksize = blocksize
+        self._padread = False
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
@@ -412,10 +415,15 @@ class PadToBlockSize(FileWrapper):
             data = data + ("X"*(size-len(data)))
         return data
 
-    def _read(self,sizehint):
+    def _read(self,sizehint=-1):
+        if self._padread:
+            return None
         data = self._fileobj.read(sizehint)
         if sizehint <= 0 or len(data) < sizehint:
             data = self._pad_to_size(data)
+            self._padread = True
+        if data == "":
+          return None
         return data
 
     def _write(self,string,flushing=False):
@@ -1050,7 +1058,7 @@ try:
             BZ2Wrapper.__init__(self,compresslevel)
             UnCompress.__init__(self,fileobj,mode)
     
-    _deprecate("BZ2File","UnBZip2")
+    _deprecate("BZ2File",UnBZip2)
 
     ##  Add handling of .bz2 files to filelike.open()
     def _BZip2_decoder(fileobj):
@@ -1130,6 +1138,30 @@ class Test_Compression(unittest.TestCase):
         self._test_rw(UnBZip2,self.bz1,self.raw1)
 
 
+class Test_ReadOne(unittest.TestCase):
+    """Testcases for reading small amounts from each wrapper."""
+    
+    def setUp(self):
+        self.text = "hi there"
+        self.infile = StringIO.StringIO(self.text)
+
+    def tearDown(self):
+        pass
+
+    def _test_readone(self,cls,dataIn,dataOut):
+        """Test reading one byte from each wrapper."""
+        g = globals()
+        for nm in g:
+          cls = g[nm]
+          if isinstance(cls,FileWrapper):
+            f = cls(self.infile)
+            b1 = f.read(1)
+            b2 = f.read(1)
+            self.assertEquals(b1,"h")
+            self.assertEquals(b2,"i")
+            self.infile.seek(0)
+
+
 def testsuite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(Test_Translate))
@@ -1139,6 +1171,7 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
     suite.addTest(unittest.makeSuite(Test_Cat))
     suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
+    suite.addTest(unittest.makeSuite(Test_ReadOne))
     try:
       if bz2:
         suite.addTest(unittest.makeSuite(Test_Compression))
@@ -1157,15 +1190,18 @@ class Debug(FileWrapper):
     def _read(self,sizehint=-1):
         data = self._fileobj.read(sizehint)
         print self._dbgname + ":R: " + repr(data)
+        print ""
         if data == "": return None
         return data
 
     def _write(self,data):
         print self._dbgname + ":W: " + repr(data)
+        print ""
         return self._fileobj.write(data)
 
     def close(self):
         print self._dbgname + ":C"
+        print ""
         
 
 # Run regression tests when called from comand-line
