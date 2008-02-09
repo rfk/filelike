@@ -100,6 +100,7 @@ class FileWrapper(FileLikeBase):
         """
         FileLikeBase.__init__(self)
         self._fileobj = fileobj
+        self._needsflush = False
         if mode is None:
             if hasattr(fileobj,"mode"):
                 self.mode = fileobj.mode
@@ -122,7 +123,7 @@ class FileWrapper(FileLikeBase):
     def flush(self):
         """Flush the write buffers of the file."""
         FileLikeBase.flush(self)
-        if hasattr(self._fileobj,"flush"):
+        if self._needsflush and hasattr(self._fileobj,"flush"):
             self._fileobj.flush()
     
     def _read(self,sizehint=-1):
@@ -131,7 +132,9 @@ class FileWrapper(FileLikeBase):
             return None
         return data
 
-    def _write(self,string):
+    def _write(self,string,flushing=False):
+        if not flushing:
+          self._needsflush = True
         return self._fileobj.write(string)
 
 
@@ -200,7 +203,7 @@ class Translate(FileWrapper):
         """Call flush on the writing translation function, if necessary."""
         if hasattr(self._wfunc,"flush"):
             return self._wfunc.flush()
-        return 
+        return None
 
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
@@ -1067,11 +1070,11 @@ try:
 
 
     class BZip2(BZ2Wrapper,Compress):
-        """Class for reading and writing to a bziped file.
+        """Class for reading and writing a bziped file.
         
-        This class behaves almost exactly like the bz2.BZ2File class from
-        the standard library, except that it accepts an arbitrary file-like
-        object and it does not support seek() or tell().
+        This class is the dual of UnBZip2 - it compresses read data, and
+        decompresses written data.  Thus BZip2(f) is the compressed version
+        of f.
         """
     
         def __init__(self,fileobj,mode=None,compresslevel=9):
@@ -1087,8 +1090,10 @@ try:
     class UnBZip2(BZ2Wrapper,UnCompress):
         """Class for reading and writing to a un-bziped file.
         
-        This class is the dual of BZip2 - it compresses read data, and
-        decompresses written data.
+        This class behaves almost exactly like the bz2.BZ2File class from
+        the standard library, except that it accepts an arbitrary file-like
+        object and it does not support seek() or tell().  All reads from
+        the file are decompressed, all writes are compressed.
         """
     
         def __init__(self,fileobj,mode=None,compresslevel=9):
