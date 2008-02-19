@@ -519,6 +519,7 @@ class UnPadToBlockSize(FileWrapper):
     def flush(self):
         FileWrapper.flush(self)
         if not self._padwritten:
+          if self._check_mode('w'):
             self._write("",flushing=True)
 
 _deprecate("PaddedToBlockSizeFile",UnPadToBlockSize)
