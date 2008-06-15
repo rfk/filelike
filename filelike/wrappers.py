@@ -390,7 +390,7 @@ class PadToBlockSize(FileWrapper):
     to meet the block size.  This is automatically added when reading,
     and stripped when writing.  The dual of this class is UnPadToBlockSize.
 
-    No guarantee is made that reads or writes are requsted at the
+    No guarantee is made that reads or writes are requested at the
     blocksize - use FixedBlockSize to achieve this.
     """
 
@@ -483,7 +483,7 @@ class UnPadToBlockSize(FileWrapper):
         data = self._fileobj.read(sizehint)
         # If we might be near the end, read far enough ahead to find the pad
         idx = data.rfind("Z")
-        while idx >= 0 and idx > (len(data) - self.blocksize):
+        while idx >= 0 and idx >= (len(data) - self.blocksize):
             newData = self._fileobj.read(self.blocksize)
             data = data + newData
             idx = data.rfind("Z")
@@ -491,7 +491,7 @@ class UnPadToBlockSize(FileWrapper):
                 break
         if data == "":
             raise ValueError("UnPadToBlockSize: no padding found in file.")
-        if idx < 0 or idx <= (len(data) - self.blocksize):
+        if idx < 0 or idx < (len(data) - self.blocksize):
             return data
         data = data[:idx]
         self._padread = True
@@ -561,6 +561,18 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf.write(self.textout7)
         bsf.flush()
         self.assertEquals(self.outfile.getvalue(),self.textin)
+
+    def test_writeLen(self):
+        """Test writing at blocksize=len"""
+        bsf = UnPadToBlockSize(self.outfile,len(self.textin),mode="w")
+        bsf.write(self.textin)
+        bsf.flush()
+        self.assertEquals(self.outfile.getvalue(),self.textin+"Z"+"X"*(len(self.textin)-1))
+        self.outfile = StringIO.StringIO()
+        bsf = PadToBlockSize(self.outfile,len(self.textin),mode="w")
+        bsf.write(self.textin+"Z"+"X"*(len(self.textin)-1))
+        bsf.flush()
+        self.assertEquals(self.outfile.getvalue(),self.textin)
     
     def test_read5(self):
         """Test reading at blocksize=5"""
@@ -583,8 +595,7 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf = PadToBlockSize(inf,5,mode="r")
         self.assertEquals(bsf.read(1),self.textout5[0])
         self.assertEquals(bsf.read(1),self.textout5[1])
-        
-        
+
     def test_read7(self):
         """Test reading at blocksize=7"""
         inf = StringIO.StringIO(self.textout7)
@@ -606,6 +617,29 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf = PadToBlockSize(inf,7,mode="r")
         self.assertEquals(bsf.read(1),self.textout7[0])
         self.assertEquals(bsf.read(1),self.textout7[1])
+        
+        
+    def test_readLen(self):
+        """Test reading at blocksize=len"""
+        inf = StringIO.StringIO(self.textin+"Z"+"X"*(len(self.textin)-1))
+        bsf = UnPadToBlockSize(inf,len(self.textin),mode="r")
+        txt = bsf.read()
+        self.assertEquals(txt,self.textin)
+
+        inf = StringIO.StringIO(self.textin)
+        bsf = PadToBlockSize(inf,len(self.textin),mode="r")
+        txt = bsf.read()
+        self.assertEquals(txt,self.textin+"Z"+"X"*(len(self.textin)-1))
+
+
+    def test_EmptyFile(self):
+        """Test PadToBlockSize with empty files."""
+        inf = StringIO.StringIO("")
+        pad = PadToBlockSize(inf,8,mode="r")
+        self.assertEquals("".join(pad),"ZXXXXXXX")
+        inf = StringIO.StringIO("ZXXXXXXX")
+        unpad = UnPadToBlockSize(inf,8,mode="r")
+        self.assertEquals("".join(unpad),"")
 
 
 class Decrypt(FileWrapper):
