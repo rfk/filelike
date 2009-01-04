@@ -170,18 +170,16 @@ class FileLikeBase:
         """Flush internal write buffer, if necessary."""
         if self.closed:
             raise IOError("File has been closed")
-        if self._check_mode("w"):
+        if self._check_mode("w") and self._wbuffer:
             buffered = ""
             if self._sbuffer:
                 buffered = buffered + self._sbuffer
                 self._sbuffer = None
-            if self._wbuffer:
-                buffered = buffered + self._wbuffer
-            if buffered:
-                leftover = self._write(buffered,flushing=True)
-                if leftover:
-                    raise IOError("Could not flush write buffer.")
+            buffered = buffered + self._wbuffer
             self._wbuffer = None
+            leftover = self._write(buffered,flushing=True)
+            if leftover:
+                raise IOError("Could not flush write buffer.")
     
     def __del__(self):
         self.close()
@@ -237,7 +235,7 @@ class FileLikeBase:
             sbuf = self._seek(offset,whence)
         except NotImplementedError:
             if whence == 1:
-                offset = self.tell() + offset
+                offset = self._tell() + offset
             elif whence == 2:
                 if hasattr(self,"size"):
                     offset = self.size + offset

@@ -341,22 +341,28 @@ class FixedBlockSize(FileWrapper):
         """
         size = self._round_down(len(data))
         self._fileobj.write(data[:size])
+        if len(data) == size:
+            return ""
         if not flushing:
             return data[size:]
         # Flushing, so we need to pad the data.
         # Try to find existing contents, use null bytes otherwise
-        try:
+        if self._check_mode("r"):
             nextBlock = self._fileobj.read(self.blocksize)
-        except IOError:
-            nextBlock = "\0" * self.blocksize
-        else:
+            self._fileobj.seek(-1*len(nextBlock),1)
             lenNB = len(nextBlock)
             if lenNB < self.blocksize:
                 nextBlock = nextBlock + "\0"*(self.blocksize-lenNB)
+        else:
+            nextBlock = "\0" * self.blocksize
         padstart = len(data) - size
         self._fileobj.write(data[size:] + nextBlock[padstart:])
+        # Seek back to start of previous block, if the file is readable.
+        if self._check_mode("r"):
+            self.seek(padstart - self.blocksize,1)
         return ""
 
+    # TODO: primative implementation of relative seek
     def _seek(self,offset,whence):
         """Absolute seek, repecting block boundaries.
 
@@ -366,7 +372,6 @@ class FixedBlockSize(FileWrapper):
         if whence != 0:
             raise NotImplementedError
         boundary = self._round_down(offset)
-        print "SEEK:", offset, boundary
         self._fileobj.seek(boundary,0)
         if boundary == offset:
             return ""
@@ -381,8 +386,7 @@ class FixedBlockSize(FileWrapper):
                 self._fileobj.seek(-1*diff,1)
                 data = data + "\0"*diff
             else:
-                self._fileobj.seek(-1*self.blocksize,1)
-            print "SBUF:", data[:(offset-boundary)]
+                self._fileobj.seek(-1*len(data),1)
             return data[:(offset-boundary)]
  
 
@@ -1287,8 +1291,8 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_TranslateNull))
     suite.addTest(unittest.makeSuite(Test_TranslateRot13))
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize5))
-#    suite.addTest(unittest.makeSuite(Test_FixedBlockSize7))
-#    suite.addTest(unittest.makeSuite(Test_FixedBlockSize24))
+    suite.addTest(unittest.makeSuite(Test_FixedBlockSize7))
+    suite.addTest(unittest.makeSuite(Test_FixedBlockSize24))
 #    suite.addTest(unittest.makeSuite(Test_CryptFiles))
 #    suite.addTest(unittest.makeSuite(Test_Head))
 #    suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
