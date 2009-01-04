@@ -1,12 +1,23 @@
 
+Version 0.3.0
+
+   * Added support for seek() and tell() methods
+   * Added support for context-manager protocol
+   * Much better support for intermingled reads and writes
+   * Restructed the 'wrappers' module to provide a consistent
+     naming scheme
+      * all wrapper classes are now read-wise verbs, e.g.
+        Decrypt(f) will decrypt all reads from f, and encrypt
+        all writes.
+
 Version 0.2.2
 
-        * Several patches to Cat thanks to Alan Fairless
+   * Several patches to Cat thanks to Alan Fairless
 
 Version 0.2.1
 
-	* Added filelike.open() functions, which tries to open files in
-	  a smart manner (e.g. fetching URLs, transparent unzipping, etc)
+   * Added filelike.open() functions, which tries to open files in
+     a smart manner (e.g. fetching URLs, transparent unzipping, etc)
 
 
 Version 0.2.0:
@@ -18,7 +29,7 @@ Version 0.2.0:
       file wrappers using a unix pipeline style
   
   Functional Changes:
- 
+
     * Allow _write() to return any unwritten data, which will be cached
       for later writing.  None may be returned if all data is written.
       Also give it a <flushing> argument to indicate when no more data
@@ -26,8 +37,8 @@ Version 0.2.0:
     * Validate access mode before reading/writing in FileLikeBase
     * Permit seperate reading and writing translation functions for TransFile
     * Added the following FileWrapper subclasses:
-    			* PaddedToBlockSizeFile: ensure file's contents meet a blocksize
-    			* Head: similar to unix `head` command
-    			* Cat: similar to unix `cat` command
-    			* BZ2File: similar to that found in the std lib
+        * PaddedToBlockSizeFile: ensure file's contents meet a blocksize
+        * Head: similar to unix `head` command
+        * Cat: similar to unix `cat` command
+        * BZ2File: similar to that found in the std lib
 

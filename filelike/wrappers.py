@@ -1,6 +1,6 @@
-# filelike.py
+# filelike/wrappers.py
 #
-# Copyright (C) 2006, Ryan Kelly
+# Copyright (C) 2006-2008, Ryan Kelly
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -21,26 +21,23 @@
 
     filelike.wrappers:  wrapper classes modifying file-like objects
     
-
 This module builds on the basic functionality of the filelike module to
 provide a collection of useful classes.  These include:
     
     * Translate:  pass file contents through an arbitrary translation
                   function (e.g. compression, encryption, ...)
                   
-    * FixedBlockSize:  ensure all read/write requests are aligned with
-                       a given blocksize
-                           
     * Decrypt:    on-the-fly reading and writing to an encrypted file
                   (using PEP272 cipher API)
 
-    * BZip2:    on-the-fly decompression of bzip'd files
-                (like the standard library's bz2 module, but accepts
-                any file-like object)
+    * Cat:  concatenate several files into a single file-like object
+
+    * UnBZip2:    on-the-fly decompression of bzip'd files
+                  (like the standard library's bz2 module, but accepts
+                  any file-like object)
  
 As an example of the type of thing this module is designed to achieve, here's
-an example of using the Decrypt wrapper to transparently access an encrypted
-file:
+how to use the Decrypt wrapper to transparently access an encrypted file:
     
     # Create the decryption key
     from Crypto.Cipher import DES
@@ -48,8 +45,9 @@ file:
     # Open the encrypted file
     f = Decrypt(file("some_encrypted_file.bin","r"),cipher)
     
-The object in <f> now behaves as a file-like object, transparently decrypting
+The object in 'f' now behaves as a file-like object, transparently decrypting
 the file on-the-fly as it is read.
+
 """ 
 
 import filelike
@@ -57,8 +55,10 @@ from filelike import FileLikeBase
 
 import os
 import unittest
-import StringIO
+from StringIO import StringIO
 import warnings
+import tempfile
+
 
 def _deprecate(oldName,newClass):
     """Mark an old class name as deprecated."""
@@ -68,6 +68,7 @@ def _deprecate(oldName,newClass):
             warnings.warn(msg,category=DeprecationWarning)
             newClass.__init__(self,*args,**kwds)
     globals()[oldName] = Deprecated
+
 
 class FileWrapper(FileLikeBase):
     """Base class for objects that wrap a file-like object.
@@ -83,24 +84,23 @@ class FileWrapper(FileLikeBase):
     same position.
     
     This class provides a basic implementation of _read() and _write()
-    which just calls read() and write() on the wrapped object.  Many
-    subclasses will probably want to override these.
+    which just calls read() and write() on the wrapped object.  Subclasses
+    will probably want to override these.
     """
     
     def __init__(self,fileobj,mode=None):
         """FileWrapper constructor.
         
-        <fileobj> must be a file-like object, which is to be wrapped
+        'fileobj' must be a file-like object, which is to be wrapped
         in another file-like object to provide additional functionality.
         
-        If given, <mode> must be the access mode string under which
+        If given, 'mode' must be the access mode string under which
         the wrapped file is to be accessed.  If not given or None, it
         is looked up on the wrapped file if possible.  Otherwise, it
         is not set on the object.
         """
         FileLikeBase.__init__(self)
         self._fileobj = fileobj
-        self._needsflush = False
         if mode is None:
             if hasattr(fileobj,"mode"):
                 self.mode = fileobj.mode
@@ -116,15 +116,10 @@ class FileWrapper(FileLikeBase):
         if hasattr(self._fileobj,"close"):
             self._fileobj.close()
 
-    def unwrap(self):
-        """Remove binding to underlying file-like object."""
-        self._fileobj = None
-
     def flush(self):
         """Flush the write buffers of the file."""
         FileLikeBase.flush(self)
-        if self._needsflush and hasattr(self._fileobj,"flush"):
-            self._fileobj.flush()
+        self._fileobj.flush()
     
     def _read(self,sizehint=-1):
         data = self._fileobj.read(sizehint)
@@ -133,9 +128,23 @@ class FileWrapper(FileLikeBase):
         return data
 
     def _write(self,string,flushing=False):
-        if not flushing:
-          self._needsflush = True
         return self._fileobj.write(string)
+
+    def _seek(self,offset,whence):
+        self._fileobj.seek(offset,whence)
+
+    def _tell(self):
+        return self._fileobj.tell()
+
+
+class Test_FileWrapper(filelike.Test_ReadWriteSeek):
+    """Testcases for FileWrapper base class."""
+    
+    def makeFile(self,contents,mode):
+        return FileWrapper(StringIO(contents),mode)
+
+
+##############
 
 
 class Translate(FileWrapper):
@@ -158,24 +167,28 @@ class Translate(FileWrapper):
     translation function, or exclusive reading or writing.  So, a single
     function is used for translation on both reads and writes.  Separate
     reading and writing translation functions may be provided using keyword
-    arguments <rfunc> and <wfunc> to the constructor.
+    arguments 'rfunc' and 'wfunc' to the constructor.
     """
     
-    def __init__(self,fileobj,func=None,mode=None,rfunc=None,wfunc=None):
-        """Translate constructor.
+    def __init__(self,fileobj,func=None,mode=None,rfunc=None,wfunc=None,bytewise=False):
+        """Translate file wrapper constructor.
 
-        <fileobj> must be the file-like object whose contents are to be
-        transformed, and <func> the callable that will transform the
-        contents.  <mode> should be one of "r" or "w" to indicate whether
+        'fileobj' must be the file-like object whose contents are to be
+        transformed, and 'func' the callable that will transform the
+        contents.  'mode' should be one of "r" or "w" to indicate whether
         reading or writing is desired.  If omitted it is determined from
-        <fileobj> where possible, otherwise it defaults to "r".
+        'fileobj' where possible, otherwise it defaults to "r".
         
         If separate reading/writing translations are required, the
-        keyword arguments <rfunc> and <wfunc> can be used in place of
-        <func>
+        keyword arguments 'rfunc' and 'wfunc' can be used in place of
+        'func'.
+
+        If the translation is guaranteed to generate a single byte of output
+        for every byte of input, set the keyword argument 'bytewise' to True.
+        This will increase the efficiency of some operations, in particular
+        of seek() and tell().
         """
         FileWrapper.__init__(self,fileobj,mode)
-        self._finished = False
         if func is not None:
             if rfunc is not None:
                 raise ValueError("Cannot specify both <func> and <rfunc>")
@@ -184,15 +197,17 @@ class Translate(FileWrapper):
             self._rfunc = func
             self._wfunc = func
         else:
-            if "r" in self.mode and rfunc is None:
-                raise ValueError("Must provide <rfunc> for readable files")
+            if "r" in self.mode or "+" in self.mode:
+                if rfunc is None:
+                    raise ValueError("Must provide <rfunc> for readable files")
             if "w" in self.mode or "a" in self.mode:
                 if wfunc is None:
-                   raise ValueError("Must provide <wfunc> for writable files")
+                    raise ValueError("Must provide <wfunc> for writable files")
             self._rfunc = rfunc
             self._wfunc = wfunc
+        self.bytewise = bytewise
+        self._pos = 0
             
-    
     def _flush_rfunc(self):
         """Call flush on the reading translation function, if necessary."""
         if hasattr(self._rfunc,"flush"):
@@ -205,31 +220,6 @@ class Translate(FileWrapper):
             return self._wfunc.flush()
         return None
 
-    def _read(self,sizehint=-1):
-        """Read approximately <sizehint> bytes from the file."""
-        if self._finished:
-            return None
-        data = self._fileobj.read(sizehint)
-        if data != "":
-            tData = self._rfunc(data)
-        else:
-            tData = data
-        if sizehint <= 0 or len(data) < sizehint:
-            self._finished = True
-            # Flush func if necessary
-            data2 = self._flush_rfunc()
-            if data2 is None:
-                if data == "":
-                    return None
-                return tData
-            return tData + data2
-        return tData
-    
-    def _write(self,data):
-        """Write the given data to the file."""
-        nData = self._wfunc(data)
-        self._fileobj.write(nData)
-
     def flush(self):
         # Flush func if necessary, when writing
         data = self._flush_wfunc()
@@ -237,52 +227,72 @@ class Translate(FileWrapper):
             self._fileobj.write(data)
         FileWrapper.flush(self)
 
+    def _read(self,sizehint=-1):
+        """Read approximately <sizehint> bytes from the file."""
+        data = self._fileobj.read(sizehint)
+        if data == "":
+            tData = self._flush_rfunc()
+            if not tData:
+                return None
+        else:
+            tData = self._rfunc(data)
+        self._pos += len(tData)
+        return tData
+    
+    def _write(self,data,flushing=False):
+        """Write the given data to the file."""
+        self._pos += len(data)
+        self._fileobj.write(self._wfunc(data))
+
+    def _tell(self):
+        return self._pos
+
+    def _seek(self,offset,whence):
+        # We can only do relative seeks if it's a bytewise translation.
+        if self.bytewise:
+            self._fileobj.seek(offset,whence)
+            self._pos = self._fileobj.tell()
+            self._flush_rfunc()
+            self._flush_wfunc()
+            return None
+        else:
+            if whence > 0:
+                raise NotImplementedError
+            # Really slow simulation of seek, using the sbuffer machinery.
+            # Is there much else we can do in this case?
+            self._fileobj.seek(0,0)
+            self._pos = 0
+            sbuf = ""
+            while len(sbuf) < offset:
+                sbuf = self._read(self._bufsize)
+            self._fileobj.seek(0,0)
+            self._pos = 0
+            return sbuf[:offset]
+
+
 _deprecate("TransFile",Translate)
 
 
-class Test_Translate(unittest.TestCase):
-    """Testcases for the Translate class."""
+class Test_TranslateNull(filelike.Test_ReadWriteSeek):
+    """Testcases for the Translate class with null translation."""
     
-    def setUp(self):
-        import StringIO
-        self.testlines = ["this is a simple test\n"," file with a\n"," few lines."]
-        self.testfileR = StringIO.StringIO("".join(self.testlines))
-        self.testfileW = StringIO.StringIO()
+    def makeFile(self,contents,mode):
         def noop(string):
             return string
-        self.f_noop = noop
-    
-    def tearDown(self):
-        del self.testfileR
-        del self.testfileW
+        return Translate(StringIO(contents),noop,mode=mode)
 
-    def test_read(self):
-        """Test reading the entire file"""
-        tf = Translate(self.testfileR,self.f_noop,"r")
-        self.assert_(tf.read() == "".join(self.testlines))
 
-    def test_readbytes(self):
-        """Test reading a specific number of bytes"""
-        tf = Translate(self.testfileR,self.f_noop,"r")
-        self.assert_(tf.read(10) == "".join(self.testlines)[:10])
-        
-    def test_readlines(self):
-        """Test reading lines one at a time."""
-        tf = Translate(self.testfileR,self.f_noop,"r")
-        self.assert_(tf.readlines() == self.testlines)
+class Test_TranslateRot13(filelike.Test_ReadWriteSeek):
+    """Testcases for the Translate class with Rot13 translation."""
     
-    def test_write(self):
-        """Test basic behavior of writing to a file."""
-        tf = Translate(self.testfileW,self.f_noop,"w")
-        tf.write("".join(self.testlines))
-        self.assert_(self.testfileW.getvalue() == "".join(self.testlines))
+    def makeFile(self,contents,mode):
+        def rot13(string):
+            return string.encode("rot13")
+        return Translate(StringIO(contents.encode("rot13")),rot13,bytewise=True,mode=mode)
     
-    def test_writelines(self):
-        """Test writing several lines with writelines()."""
-        tf = Translate(self.testfileW,self.f_noop,"w")
-        tf.writelines(self.testlines)
-        self.assert_(self.testfileW.getvalue() == "".join(self.testlines))
-        
+
+#############
+
 
 class FixedBlockSize(FileWrapper):
     """Class reading/writing to files at a fixed block size.
@@ -294,30 +304,23 @@ class FixedBlockSize(FileWrapper):
     example, to write data to a cipher function without manually 
     chunking text to match the cipher's block size.
     
-    If the total data written to the file when it is flushed or closed
-    is not a multiple of the blocksize, it will be padded to the
-    appropriate size with null bytes.
+    If the total data written to the file when it is closed is not
+    a multiple of the blocksize, it will be padded to the appropriate
+    size with null bytes.
     """
     
     def __init__(self,fileobj,blocksize,mode=None):
         FileWrapper.__init__(self,fileobj,mode)
-        self._blocksize = blocksize
+        self.blocksize = blocksize
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
-        return ((num/self._blocksize)+1) * self._blocksize
+        return ((num/self.blocksize)+1) * self.blocksize
     
     def _round_down(self,num):
         """Round <num> down to a multiple of the block size."""
-        return (num/self._blocksize) * self._blocksize
+        return (num/self.blocksize) * self.blocksize
 
-    def _pad_to_size(self,data):
-        """Add padding data to make it an appropriate size."""
-        size = self._round_up(len(data))
-        if len(data) < size:
-            data = data + ("\0"*(size-len(data)))
-        return data
-    
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
         if sizehint <= 0:
@@ -329,57 +332,100 @@ class FixedBlockSize(FileWrapper):
         return data
 
     def _write(self,data,flushing=False):
-        """Write the given string to the file."""
-        # Pad the data if the buffers are being flushed
-        if flushing:
-            data = self._pad_to_size(data)
-            size = len(data)
-        else:
-            size = self._round_down(len(data))
+        """Write the given string to the file.
+
+        When flushing data to the file, it may need to be padded to the
+        block size.  First we attempt to read additional data from the
+        underlying file to use for the padding, but if this fails then
+        we pad with null bytes.
+        """
+        size = self._round_down(len(data))
         self._fileobj.write(data[:size])
-        return data[size:]
+        if not flushing:
+            return data[size:]
+        # Flushing, so we need to pad the data.
+        # Try to find existing contents, use null bytes otherwise
+        try:
+            nextBlock = self._fileobj.read(self.blocksize)
+        except IOError:
+            nextBlock = "\0" * self.blocksize
+        else:
+            lenNB = len(nextBlock)
+            if lenNB < self.blocksize:
+                nextBlock = nextBlock + "\0"*(self.blocksize-lenNB)
+        padstart = len(data) - size
+        self._fileobj.write(data[size:] + nextBlock[padstart:])
+        return ""
+
+    def _seek(self,offset,whence):
+        """Absolute seek, repecting block boundaries.
+
+        This method performs an absolute file seek to the block boundary
+        closest to (but not exceeding) the specified offset.
+        """
+        if whence != 0:
+            raise NotImplementedError
+        boundary = self._round_down(offset)
+        print "SEEK:", offset, boundary
+        self._fileobj.seek(boundary,0)
+        if boundary == offset:
+            return ""
+        else:
+            data = self._fileobj.read(self.blocksize)
+            diff = offset - boundary - len(data)
+            if diff > 0:
+                # Seeked past end of file.  Actually do this on fileobj, so
+                # that it will raise an error if appropriate.  If it doesn't
+                # then we'll pad with null bytes.
+                self._fileobj.seek(diff,1)
+                self._fileobj.seek(-1*diff,1)
+                data = data + "\0"*diff
+            else:
+                self._fileobj.seek(-1*self.blocksize,1)
+            print "SBUF:", data[:(offset-boundary)]
+            return data[:(offset-boundary)]
+ 
 
 _deprecate("FixedBlockSizeFile",FixedBlockSize)
 
 
-class Test_FixedBlockSize(unittest.TestCase):
-    """Testcases for the FixedBlockSize class."""
+class Test_FixedBlockSize5(filelike.Test_ReadWriteSeek):
+    """Testcases for the FixedBlockSize class, with blocksize 5."""
+
+    blocksize = 5
     
-    def setUp(self):
-        import StringIO
+    def makeFile(self,contents,mode):
+        f = StringIO(contents)
+        f.seek(0)
         class BSFile:
-            def __init__(s,bs):
-                s.bs = bs
+            """Simulate reads/writes, asserting correct blocksize."""
             def read(s,size=-1):
                 self.assert_(size > 0)
-                self.assert_(size%s.bs == 0)
-                return "X"*size
+                self.assert_(size % self.blocksize == 0)
+                return f.read(size)
             def write(s,data):
-                self.assert_(len(data)%s.bs == 0)
-        self.BSFile = BSFile
-    
-    def tearDown(self):
-        del self.BSFile
+                self.assert_(len(data)%self.blocksize == 0)
+                f.write(data)
+            def seek(s,offset,whence):
+                f.seek(offset,whence)
+            def tell(s):
+                return f.tell()
+            def flush(self):
+                f.flush()
+        return FixedBlockSize(BSFile(),self.blocksize)
 
-    def test_readbytes(self):
-        """Test reading different numbers of bytes"""
-        bsf = FixedBlockSize(self.BSFile(8),8)
-        self.assert_(len(bsf.read(5)) == 5)
-        self.assert_(len(bsf.read(8)) == 8)
-        self.assert_(len(bsf.read(76)) == 76)
-        bsf = FixedBlockSize(self.BSFile(5),5)
-        self.assert_(len(bsf.read(5)) == 5)
-        self.assert_(len(bsf.read(8)) == 8)
-        self.assert_(len(bsf.read(76)) == 76)
-            
-    def test_write(self):
-        """Test writing different numbers of bytes"""
-        bsf = FixedBlockSize(self.BSFile(8),8)
-        bsf.write("this is some text, it is")
-        bsf.write("shrt")
-        bsf.flush()
-        bsf.write("longer text, with some\n newlines in it\n yessir.")   
-        bsf.close() 
+
+class Test_FixedBlockSize7(Test_FixedBlockSize5):
+    """Testcases for the FixedBlockSize class, with blocksize 7."""
+    blocksize = 7
+
+
+class Test_FixedBlockSize24(Test_FixedBlockSize5):
+    """Testcases for the FixedBlockSize class, with blocksize 24."""
+    blocksize = 24
+
+
+#############
 
 
 class PadToBlockSize(FileWrapper):
@@ -522,6 +568,7 @@ class UnPadToBlockSize(FileWrapper):
           if self._check_mode('w'):
             self._write("",flushing=True)
 
+
 _deprecate("PaddedToBlockSizeFile",UnPadToBlockSize)
 
 
@@ -529,11 +576,10 @@ class Test_PadToBlockSize(unittest.TestCase):
     """Testcases for the [Un]PadToBlockSize class."""
     
     def setUp(self):
-        import StringIO
         self.textin = "Zhis is sample text"
         self.textout5 = "Zhis is sample textZ"
         self.textout7 = "Zhis is sample textZX"
-        self.outfile = StringIO.StringIO()
+        self.outfile = StringIO()
     
     def tearDown(self):
         del self.outfile
@@ -544,7 +590,7 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf.write(self.textin)
         bsf.flush()
         self.assertEquals(self.outfile.getvalue(),self.textout5)
-        self.outfile = StringIO.StringIO()
+        self.outfile = StringIO()
         bsf = PadToBlockSize(self.outfile,5,mode="w")
         bsf.write(self.textout5)
         bsf.flush()
@@ -556,7 +602,7 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf.write(self.textin)
         bsf.flush()
         self.assertEquals(self.outfile.getvalue(),self.textout7)
-        self.outfile = StringIO.StringIO()
+        self.outfile = StringIO()
         bsf = PadToBlockSize(self.outfile,7,mode="w")
         bsf.write(self.textout7)
         bsf.flush()
@@ -568,7 +614,7 @@ class Test_PadToBlockSize(unittest.TestCase):
         bsf.write(self.textin)
         bsf.flush()
         self.assertEquals(self.outfile.getvalue(),self.textin+"Z"+"X"*(len(self.textin)-1))
-        self.outfile = StringIO.StringIO()
+        self.outfile = StringIO()
         bsf = PadToBlockSize(self.outfile,len(self.textin),mode="w")
         bsf.write(self.textin+"Z"+"X"*(len(self.textin)-1))
         bsf.flush()
@@ -576,44 +622,44 @@ class Test_PadToBlockSize(unittest.TestCase):
     
     def test_read5(self):
         """Test reading at blocksize=5"""
-        inf = StringIO.StringIO(self.textout5)
+        inf = StringIO(self.textout5)
         bsf = UnPadToBlockSize(inf,5,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
 
-        inf = StringIO.StringIO(self.textout5)
+        inf = StringIO(self.textout5)
         bsf = UnPadToBlockSize(inf,5,mode="r")
         self.assertEquals(bsf.read(1),self.textin[0])
         self.assertEquals(bsf.read(1),self.textin[1])
 
-        inf = StringIO.StringIO(self.textin)
+        inf = StringIO(self.textin)
         bsf = PadToBlockSize(inf,5,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textout5)
 
-        inf = StringIO.StringIO(self.textin)
+        inf = StringIO(self.textin)
         bsf = PadToBlockSize(inf,5,mode="r")
         self.assertEquals(bsf.read(1),self.textout5[0])
         self.assertEquals(bsf.read(1),self.textout5[1])
 
     def test_read7(self):
         """Test reading at blocksize=7"""
-        inf = StringIO.StringIO(self.textout7)
+        inf = StringIO(self.textout7)
         bsf = UnPadToBlockSize(inf,7,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
 
-        inf = StringIO.StringIO(self.textout7)
+        inf = StringIO(self.textout7)
         bsf = UnPadToBlockSize(inf,7,mode="r")
         self.assertEquals(bsf.read(1),self.textin[0])
         self.assertEquals(bsf.read(1),self.textin[1])
 
-        inf = StringIO.StringIO(self.textin)
+        inf = StringIO(self.textin)
         bsf = PadToBlockSize(inf,7,mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textout7)
 
-        inf = StringIO.StringIO(self.textin)
+        inf = StringIO(self.textin)
         bsf = PadToBlockSize(inf,7,mode="r")
         self.assertEquals(bsf.read(1),self.textout7[0])
         self.assertEquals(bsf.read(1),self.textout7[1])
@@ -621,12 +667,12 @@ class Test_PadToBlockSize(unittest.TestCase):
         
     def test_readLen(self):
         """Test reading at blocksize=len"""
-        inf = StringIO.StringIO(self.textin+"Z"+"X"*(len(self.textin)-1))
+        inf = StringIO(self.textin+"Z"+"X"*(len(self.textin)-1))
         bsf = UnPadToBlockSize(inf,len(self.textin),mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin)
 
-        inf = StringIO.StringIO(self.textin)
+        inf = StringIO(self.textin)
         bsf = PadToBlockSize(inf,len(self.textin),mode="r")
         txt = bsf.read()
         self.assertEquals(txt,self.textin+"Z"+"X"*(len(self.textin)-1))
@@ -634,12 +680,15 @@ class Test_PadToBlockSize(unittest.TestCase):
 
     def test_EmptyFile(self):
         """Test PadToBlockSize with empty files."""
-        inf = StringIO.StringIO("")
+        inf = StringIO("")
         pad = PadToBlockSize(inf,8,mode="r")
         self.assertEquals("".join(pad),"ZXXXXXXX")
-        inf = StringIO.StringIO("ZXXXXXXX")
+        inf = StringIO("ZXXXXXXX")
         unpad = UnPadToBlockSize(inf,8,mode="r")
         self.assertEquals("".join(unpad),"")
+
+
+#############
 
 
 class Decrypt(FileWrapper):
@@ -663,20 +712,21 @@ class Decrypt(FileWrapper):
 
     def __init__(self,fileobj,cipher,mode=None):
         """Decrypt Constructor.
-        <fileobj> is the file object with encrypted contents, and <cipher>
+
+        'fileobj' is the file object with encrypted contents, and 'cipher'
         is the cipher object to be used.  Other arguments are passed through
         to FileWrapper.__init__
         """
-        self.__cipher = cipher
+        self._cipher = cipher
         myFileObj = Translate(fileobj,mode=mode,
                                       rfunc=cipher.decrypt,
                                       wfunc=cipher.encrypt)
         myFileObj = FixedBlockSize(myFileObj,cipher.block_size)
         FileWrapper.__init__(self,myFileObj)
-
+        
     def setCipher(self,cipher):
         """Change the cipher after object initialization."""
-        self.__cipher = cipher
+        self._cipher = cipher
         self._rfunc = cipher.decrypt
         self._wfunc = cipher.encrypt
 
@@ -736,16 +786,15 @@ class Test_CryptFiles(unittest.TestCase):
     """Testcases for the (En/De)Crypt classes."""
     
     def setUp(self):
-        import StringIO
         from Crypto.Cipher import DES
         # Example inspired by the PyCrypto manual
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
         self.plaintextin = "Guido van Rossum is a space alien."
         self.plaintextout = "Guido van Rossum is a space alien." + "\0"*6
         self.ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
-        self.plainfile = StringIO.StringIO(self.plaintextin)
-        self.cryptfile = StringIO.StringIO(self.ciphertext)
-        self.outfile = StringIO.StringIO()
+        self.plainfile = StringIO(self.plaintextin)
+        self.cryptfile = StringIO(self.ciphertext)
+        self.outfile = StringIO()
 
     def tearDown(self):
         pass
@@ -872,8 +921,8 @@ class Test_Head(unittest.TestCase):
     
     def setUp(self):
         self.intext = "Guido van Rossum\n is a space\n alien."
-        self.infile = StringIO.StringIO(self.intext)
-        self.outfile = StringIO.StringIO()
+        self.infile = StringIO(self.intext)
+        self.outfile = StringIO()
 
     def tearDown(self):
         pass
@@ -1016,9 +1065,9 @@ class Test_Cat(unittest.TestCase):
         self.intext1 = "Guido van Rossum\n is a space\n alien."
         self.intext2 = "But that's ok with me!"
         self.intext3 = "What do you think?"
-        self.infile1 = StringIO.StringIO(self.intext1)
-        self.infile2 = StringIO.StringIO(self.intext2)
-        self.infile3 = StringIO.StringIO(self.intext3)
+        self.infile1 = StringIO(self.intext1)
+        self.infile2 = StringIO(self.intext2)
+        self.infile3 = StringIO(self.intext3)
 
     def tearDown(self):
         pass
@@ -1205,16 +1254,16 @@ class Test_Compression(unittest.TestCase):
 
     def _test_rw(self,cls,dataIn,dataOut):
         """Basic read/write testing."""
-        f = cls(StringIO.StringIO(dataOut),'r')
+        f = cls(StringIO(dataOut),'r')
         c = "".join(f)
         self.assertEquals(c,dataIn)
-        f = cls(StringIO.StringIO(),'w')
+        f = cls(StringIO(),'w')
         f.write(dataIn)
         f.flush()
         self.assertEquals(f._fileobj.getvalue(),dataOut)
 
     def _test_readone(self,cls,dataIn,dataOut):
-        f = cls(StringIO.StringIO(dataOut),'r')
+        f = cls(StringIO(dataOut),'r')
         c = f.read(1)
         self.assertEquals(c,dataIn[0])
         c = f.read(1)
@@ -1234,44 +1283,24 @@ class Test_Compression(unittest.TestCase):
 
 def testsuite():
     suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_Translate))
-    suite.addTest(unittest.makeSuite(Test_FixedBlockSize))
-    suite.addTest(unittest.makeSuite(Test_CryptFiles))
-    suite.addTest(unittest.makeSuite(Test_Head))
-    suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
-    suite.addTest(unittest.makeSuite(Test_Cat))
-    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
-    try:
-      if bz2:
-        suite.addTest(unittest.makeSuite(Test_Compression))
-    except NameError:
-      pass
+    suite.addTest(unittest.makeSuite(Test_FileWrapper))
+    suite.addTest(unittest.makeSuite(Test_TranslateNull))
+    suite.addTest(unittest.makeSuite(Test_TranslateRot13))
+    suite.addTest(unittest.makeSuite(Test_FixedBlockSize5))
+#    suite.addTest(unittest.makeSuite(Test_FixedBlockSize7))
+#    suite.addTest(unittest.makeSuite(Test_FixedBlockSize24))
+#    suite.addTest(unittest.makeSuite(Test_CryptFiles))
+#    suite.addTest(unittest.makeSuite(Test_Head))
+#    suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
+#    suite.addTest(unittest.makeSuite(Test_Cat))
+#    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
+#    try:
+#      if bz2:
+#        suite.addTest(unittest.makeSuite(Test_Compression))
+#    except NameError:
+#      pass
     return suite
 
-
-class Debug(FileWrapper):
-    """Dump reads/writes to the screen."""
-
-    def __init__(self,fileobj,mode=None,dbgname=""):
-        FileWrapper.__init__(self,fileobj,mode)
-        self._dbgname = dbgname
-
-    def _read(self,sizehint=-1):
-        data = self._fileobj.read(sizehint)
-        print self._dbgname + ":R: " + repr(data)
-        print ""
-        if data == "": return None
-        return data
-
-    def _write(self,data):
-        print self._dbgname + ":W: " + repr(data)
-        print ""
-        return self._fileobj.write(data)
-
-    def close(self):
-        print self._dbgname + ":C"
-        print ""
-        
 
 # Run regression tests when called from comand-line
 if __name__ == "__main__":

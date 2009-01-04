@@ -1,10 +1,29 @@
+# filelike/pipeline.py
+#
+# Copyright (C) 2006-2008, Ryan Kelly
+#
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+#
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the
+# Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+#
 """
 
-    filelike.pipeline:  modify file-like objects using unix pipeline style
+    filelike.pipeline:  manipulate file-like objects in unix pipeline style
     
 This module utilises python's operator overloading magic to allow file-like
-wrappers such as those found in filelike.wrappers to be composed using a
-unix pipeline style.
+wrappers such as those found in filelike.wrappers to be composed in the style
+of a unix pipeline.
 
 Ideas based on the following ASPN Cookbook Recipie:
     
@@ -40,15 +59,13 @@ and write.  At the beginning of a pipeline, it indicates that data is to
 be read from the file.  At the end, it indicates data should be written
 to the file.
 
-TODO: more examples here
-
 """
 
 import filelike
 
 import os
 import unittest
-import StringIO
+from StringIO import StringIO
 
 class PipelineEntry:
     """Class implementing a step in a file-like pipeline.
@@ -64,9 +81,10 @@ class PipelineEntry:
     
     def __init__(self,cls,*args,**kwds):
         """PipelineEntry constructor.
-        <cls> is the class of the file-like wrapper to create.  Additional
+
+        'cls' is the class of the file-like wrapper to create.  Additional
         args may be specified and will be passed in after the requisite
-        <fileobj> first argument in the class's constructor.
+        'fileobj' first argument in the class's constructor.
         """
         self._cls = cls
         self._args = args
@@ -84,7 +102,7 @@ class PipelineEntry:
     def __lt__(self,obj):
         """Implement read-from-file pipeline stage.
         
-        <obj> must not be a PipelineEntry, and must be coercable
+        'obj' must not be a PipelineEntry, and must be coercable
         to a file-like object using filelike.to_filelike() with
         mode "r".
         
@@ -99,7 +117,7 @@ class PipelineEntry:
     def __gt__(self,obj):
         """Implement write-to-file pipeline stage.
         
-        <obj> must not be a PipelineEntry, and must be coercable
+        'obj' must not be a PipelineEntry, and must be coercable
         to a file-like object using filelike.to_filelike() with
         mode "w".
         
@@ -124,7 +142,7 @@ class PipelineEntry:
     def __or__(self,obj):
         """Implement left-hand pipe segment in pipeling stage.
         
-        <obj> should be the next pipeline stage.  This starts a
+        'obj' should be the next pipeline stage.  This starts a
         PipelineStack.
         """
         return PipelineStack(self,obj)
@@ -139,7 +157,8 @@ class PipelineStack:
     
     def __init__(self,first,second):
         """PipelineStack constructor.
-        <first> and <second> must be the initial two stages in the
+
+        'first' and 'second' must be the initial two stages in the
         pipeline.
         """
         self._stages = [second,first]
@@ -147,7 +166,7 @@ class PipelineStack:
     def __or__(self,obj):
         """Implement left-hand pipe segment in pipeling stage.
         
-        <obj> should be the next pipeline stage, which is added to the stack.
+        'obj' should be the next pipeline stage, which is added to the stack.
         """
         self._stages.append(obj)
         return self
@@ -155,7 +174,7 @@ class PipelineStack:
     def __gt__(self,obj):
         """Implement write-to-file pipeline stage.
         
-        <obj> must not be a PipelineEntry, and must be coercable
+        'obj' must not be a PipelineEntry, and must be coercable
         to a file-like object using filelike.to_filelike() with
         mode "w".
         
@@ -173,7 +192,7 @@ class PipelineStack:
     def __lt__(self,obj):
         """Implement read-from-file pipeline stage.
         
-        <obj> must not be a PipelineEntry, and must be coercable
+        'obj' must not be a PipelineEntry, and must be coercable
         to a file-like object using filelike.to_filelike() with
         mode "w".
         
@@ -212,9 +231,9 @@ class Test_Pipeline(unittest.TestCase):
         self.plaintextin = "Guido van Rossum is a space alien."
         self.plaintextout = "Guido van Rossum is a space alien." + "\0"*6
         self.ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
-        self.plainfile = StringIO.StringIO(self.plaintextin)
-        self.cryptfile = StringIO.StringIO(self.ciphertext)
-        self.outfile = StringIO.StringIO()
+        self.plainfile = StringIO(self.plaintextin)
+        self.cryptfile = StringIO(self.ciphertext)
+        self.outfile = StringIO()
 
     def tearDown(self):
         pass
@@ -251,7 +270,6 @@ for nm in dir(wrappers):
                 globals()[nm] = pipeline(cls)
     except TypeError:
         pass
-
 
 
 def testsuite():
