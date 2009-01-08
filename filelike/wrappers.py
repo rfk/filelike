@@ -313,10 +313,14 @@ class FixedBlockSize(FileWrapper):
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
+        if num % self.blocksize == 0:
+            return num
         return ((num/self.blocksize)+1) * self.blocksize
     
     def _round_down(self,num):
         """Round <num> down to a multiple of the block size."""
+        if num % self.blocksize == 0:
+            return num
         return (num/self.blocksize) * self.blocksize
 
     def _read(self,sizehint=-1):
@@ -376,8 +380,7 @@ class FixedBlockSize(FileWrapper):
                 # that it will raise an error if appropriate.
                 self._fileobj.seek(diff,1)
                 self._fileobj.seek(-1*diff,1)
-            else:
-                self._fileobj.seek(-1*len(data),1)
+            self._fileobj.seek(-1*len(data),1)
             return data[:(offset-boundary)]
  
 
@@ -431,57 +434,117 @@ class PadToBlockSize(FileWrapper):
     to meet the block size.  This is automatically added when reading,
     and stripped when writing.  The dual of this class is UnPadToBlockSize.
 
-    No guarantee is made that reads or writes are requested at the
-    blocksize - use FixedBlockSize to achieve this.
+    This class does not align reads or writes along block boundaries.
     """
 
     def __init__(self,fileobj,blocksize,mode=None):
         FileWrapper.__init__(self,fileobj,mode)
         self.blocksize = blocksize
-        self._padread = False
+        self._padseen = ""
+        self._padat = None
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
-        nm = ((num/self.blocksize)+1) * self.blocksize
-        if nm == num + self.blocksize:
+        if num % self.blocksize == 0:
             return num
-        return nm
+        return ((num/self.blocksize)+1) * self.blocksize
     
     def _round_down(self,num):
         """Round <num> down to a multiple of the block size."""
+        if num % self.blocksize == 0:
+            return num
         return (num/self.blocksize) * self.blocksize
     
-    def _pad_to_size(self,data):
-        """Pad data to make it an appropriate size."""
-        data = data + "Z"
-        size = self._round_up(len(data))
-        if len(data) < size:
-            data = data + ("X"*(size-len(data)))
-        return data
+    def _padding(self,data):
+        """Get the padding needed to make 'data' match the blocksize."""
+        padding = "Z"
+        size = self._round_up(len(data)+1)
+        padding = padding + ("X"*(size-len(data)-1))
+        return padding
 
     def _read(self,sizehint=-1):
-        if self._padread:
-            return None
+        # Always read at the blocksize, as it makes padding easier
+        if sizehint > 0:
+            sizehint = self._round_up(sizehint)
         data = self._fileobj.read(sizehint)
-        if sizehint <= 0 or len(data) < sizehint:
-            data = self._pad_to_size(data)
-            self._padread = True
-        if data == "":
-          return None
+        if sizehint < 0 or len(data) < sizehint:
+            if self._pad_at is None:
+                
+            if not self._padseen:
+                self._padseen = self._padding(data)
+                data = data + self._padseen
+            else:
+                assert data == ""
+                return None
+        self._pos += len(data)
         return data
 
     def _write(self,string,flushing=False):
-        idx = string.rfind("Z")
-        if idx < 0 or idx < (len(string) - self.blocksize):
-            if flushing:
-                raise ValueError("PadToBlockSize: no padding found in file.")
-            self._fileobj.write(string)
+        # Check whether this could contain the padding block.
+        zIdx = string.rfind("Z")
+        maybePad = zIdx >= len(string) - self.blocksize - 1
+        for c in string[zIdx+1:]:
+            if c != "X":
+                maybePad = False
+                break
+        # If it may contain the padding block, don't write those blocks
+        # just yet.  Otherwise, write as much as possible.
+        if maybePad:
+            size = self._round_down(zIdx)
+        else:
+            size = self._round_down(len(string))
+        self._pos += size
+        self._fileobj.write(string[:size])
+        leftover = string[size:]
+        # If there's no leftover, well, that was easy :-)
+        if not leftover:
             return None
-        s2 = string[:idx]
-        self._fileobj.write(s2)
-        if flushing:
-            return None
-        return string[idx:]
+        # If we're not flushing, we can delay writing the leftovers.
+        if not flushing:
+            return leftover
+        # If we are flushing, we need to write the leftovers.
+        # If we're in the middle of the file, write out a complete block
+        # using the existing file contents.  Only works is readable...
+        if self._check_mode("r"):
+            lenNB = self._round_up(len(leftover))
+            nextBlock = self._fileobj.read(lenNB)
+            self._fileobj.seek(-1*len(nextBlock),1)
+            if lenNB == len(nextBlock):
+                padstart = lenNB - len(leftover)
+                self._pos += lenNB
+                self._fileobj.write(leftover + nextBlock[padstart:])
+                self.seek(padstart - lenNB,1)
+                return None
+        # Otherwise, we must be at the end of the file.
+        # Remove the padding data from the leftovers
+        if maybePad:
+            zIdx = leftover.rfind("Z")
+            self._pos += len(leftover)
+            self._fileobj.write(leftover[:zIdx])
+        return None
+
+    def _seek(self,offset,whence):
+        if whence > 0:
+            raise NotImplementedError
+        boundary = self._round_down(offset)
+        self._fileobj.seek(boundary,0)
+        if boundary == offset:
+            return ""
+        else:
+            data = self._fileobj.read(self.blocksize)
+            diff = offset - boundary - len(data)
+            if diff > 0:
+                # Seeked past end of file.  Actually do this on fileobj, so
+                # that it will raise an error if appropriate.  If it doesn't
+                # then we'll pad with the appropriate sequence.
+                self._fileobj.seek(diff,1)
+                self._fileobj.seek(-1*diff,1)
+                data = data + "Z" + "X"*(diff-1)
+            self._fileobj.seek(-1*len(data),1)
+            return data[:(offset-boundary)]
+
+    def _tell(self):
+        return self._pos
         
 
 class UnPadToBlockSize(FileWrapper):
@@ -495,18 +558,17 @@ class UnPadToBlockSize(FileWrapper):
     def __init__(self,fileobj,blocksize,mode=None):
         FileWrapper.__init__(self,fileobj,mode)
         self.blocksize = blocksize
-        self._padwritten = False
-        self._padread = False
-    
+
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
-        nm = ((num/self.blocksize)+1) * self.blocksize
-        if nm == num + self.blocksize:
+        if num % self.blocksize == 0:
             return num
-        return nm
+        return ((num/self.blocksize)+1) * self.blocksize
     
     def _round_down(self,num):
         """Round <num> down to a multiple of the block size."""
+        if num % self.blocksize == 0:
+            return num
         return (num/self.blocksize) * self.blocksize
     
     def _pad_to_size(self,data):
@@ -519,168 +581,118 @@ class UnPadToBlockSize(FileWrapper):
     
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
-        if self._padread:
-            return None
+        if sizehint >= 0:
+            sizehint = self._round_up(sizehint)
         data = self._fileobj.read(sizehint)
         # If we might be near the end, read far enough ahead to find the pad
-        idx = data.rfind("Z")
-        while idx >= 0 and idx >= (len(data) - self.blocksize):
+        if data == "X"*self.blocksize:
             newData = self._fileobj.read(self.blocksize)
+            sizehint += self.blocksize
             data = data + newData
-            idx = data.rfind("Z")
-            if newData == "":
-                break
+        zIdx = data.rfind("Z")
+        if zIdx >= 0:
+            while zIdx >= (len(data) - self.blocksize - 1):
+                newData = self._fileobj.read(self.blocksize)
+                sizehint += self.blocksize
+                data = data + newData
+                zIdx = data.rfind("Z")
+                if newData == "":
+                    break
+        # Return the data, stripping the pad if we're at the end
         if data == "":
-            raise ValueError("UnPadToBlockSize: no padding found in file.")
-        if idx < 0 or idx < (len(data) - self.blocksize):
-            return data
-        data = data[:idx]
-        self._padread = True
-        if data == "":
-            data = None
-        return data
+            return None
+        if sizehint < 0 or len(data) < sizehint:
+            if zIdx < 0:
+                assert len(data) <= self.blocksize
+                return None
+            else:
+                return data[:zIdx]
 
     def _write(self,data,flushing=False):
         """Write the given string to the file."""
-        # Writing at the block size means we dont have to count bytes written.
-        # Pad the data if the buffers are being flushed.
-        if flushing:
-            if self._padwritten:
-                size = 0
-                data = ""
-            else:
-                data = self._pad_to_size(data)
-                size = len(data)
-                self._padwritten = True
-        else:
-            size = self._round_down(len(data))
+        size = self._round_down(len(data))
         self._fileobj.write(data[:size])
-        return data[size:]
+        leftover = data[size:]
+        if not flushing:
+            return leftover
+        # Flushing, so we need to pad the data.  If the file is readable,
+        # check to see if we're in the middle and pad using existing data.
+        if self._check_mode("r"):
+            lenNB = self._round_up(len(leftover))
+            nextBlock = self._fileobj.read(lenNB)
+            self._fileobj.seek(-1*len(nextBlock),1)
+            if lenNB == len(nextBlock):
+                padstart = lenNB - len(leftover)
+                self._fileobj.write(leftover + nextBlock[padstart:])
+                self.seek(padstart - lenNB,1)
+                return None
+        # Otherwise, we must be at the end of the file.
+        self._fileobj.write(self._pad_to_size(leftover))
+        return None
 
-    def flush(self):
-        FileWrapper.flush(self)
-        if not self._padwritten:
-          if self._check_mode('w'):
-            self._write("",flushing=True)
+    def _seek(self,offset,whence):
+        if whence > 0:
+            raise NotImplementedError
+        boundary = self._round_down(offset)
+        self._fileobj.seek(boundary,0)
+        if boundary == offset:
+            return ""
+        else:
+            data = self._fileobj.read(offset - boundary)
+            diff = offset - boundary - len(data)
+            if diff > 0:
+                # Seeked past end of file.  Actually do this on fileobj, so
+                # that it will raise an error if appropriate.  If it doesn't
+                # then we'll pad with null bytes.
+                self._fileobj.seek(diff,1)
+                self._fileobj.seek(-1*diff,1)
+                data = data + "\0"*diff
+            else:
+                self._fileobj.seek(-1*len(data),1)
+            return data[:(offset-boundary)]
+
 
 
 _deprecate("PaddedToBlockSizeFile",UnPadToBlockSize)
 
 
-class Test_PadToBlockSize(unittest.TestCase):
-    """Testcases for the [Un]PadToBlockSize class."""
-    
-    def setUp(self):
-        self.textin = "Zhis is sample text"
-        self.textout5 = "Zhis is sample textZ"
-        self.textout7 = "Zhis is sample textZX"
-        self.outfile = StringIO()
-    
-    def tearDown(self):
-        del self.outfile
+class Test_PadToBlockSize_5(filelike.Test_ReadWriteSeek):
+    """Testcases for PadToBlockSize."""
 
-    def test_write5(self):
-        """Test writing at blocksize=5"""
-        bsf = UnPadToBlockSize(self.outfile,5,mode="w")
-        bsf.write(self.textin)
-        bsf.flush()
-        self.assertEquals(self.outfile.getvalue(),self.textout5)
-        self.outfile = StringIO()
-        bsf = PadToBlockSize(self.outfile,5,mode="w")
-        bsf.write(self.textout5)
-        bsf.flush()
-        self.assertEquals(self.outfile.getvalue(),self.textin)
+    contents = "this is some sample textZ"
+    text_plain = ["Zhis is sample texty"]
+    text_padded = ["Zhis is sample textyZXXXX"]
+    blocksize = 5
 
-    def test_write7(self):
-        """Test writing at blocksize=7"""
-        bsf = UnPadToBlockSize(self.outfile,7,mode="w")
-        bsf.write(self.textin)
-        bsf.flush()
-        self.assertEquals(self.outfile.getvalue(),self.textout7)
-        self.outfile = StringIO()
-        bsf = PadToBlockSize(self.outfile,7,mode="w")
-        bsf.write(self.textout7)
-        bsf.flush()
-        self.assertEquals(self.outfile.getvalue(),self.textin)
+    def makeFile(self,contents,mode):
+        # Careful here - 'contents' should be the contents of the returned
+        # file, and is therefore expected to contain the padding.  But for
+        # easy testing we allow it to omit the padding and be used directly
+        # in the underlying StringIO object.
+        idx = contents.rfind("Z")
+        if idx < 0:
+            idx = len(contents)
+        f = PadToBlockSize(StringIO(contents[:idx]),self.blocksize,mode=mode)
+        return f
 
-    def test_writeLen(self):
-        """Test writing at blocksize=len"""
-        bsf = UnPadToBlockSize(self.outfile,len(self.textin),mode="w")
-        bsf.write(self.textin)
-        bsf.flush()
-        self.assertEquals(self.outfile.getvalue(),self.textin+"Z"+"X"*(len(self.textin)-1))
-        self.outfile = StringIO()
-        bsf = PadToBlockSize(self.outfile,len(self.textin),mode="w")
-        bsf.write(self.textin+"Z"+"X"*(len(self.textin)-1))
-        bsf.flush()
-        self.assertEquals(self.outfile.getvalue(),self.textin)
-    
-    def test_read5(self):
-        """Test reading at blocksize=5"""
-        inf = StringIO(self.textout5)
-        bsf = UnPadToBlockSize(inf,5,mode="r")
-        txt = bsf.read()
-        self.assertEquals(txt,self.textin)
+    def test_padding(self):
+        for (plain,padded) in zip(self.text_plain,self.text_padded):
+            f = self.makeFile(padded,"rw")
+            self.assertEquals(f._fileobj.getvalue(),plain)
 
-        inf = StringIO(self.textout5)
-        bsf = UnPadToBlockSize(inf,5,mode="r")
-        self.assertEquals(bsf.read(1),self.textin[0])
-        self.assertEquals(bsf.read(1),self.textin[1])
-
-        inf = StringIO(self.textin)
-        bsf = PadToBlockSize(inf,5,mode="r")
-        txt = bsf.read()
-        self.assertEquals(txt,self.textout5)
-
-        inf = StringIO(self.textin)
-        bsf = PadToBlockSize(inf,5,mode="r")
-        self.assertEquals(bsf.read(1),self.textout5[0])
-        self.assertEquals(bsf.read(1),self.textout5[1])
-
-    def test_read7(self):
-        """Test reading at blocksize=7"""
-        inf = StringIO(self.textout7)
-        bsf = UnPadToBlockSize(inf,7,mode="r")
-        txt = bsf.read()
-        self.assertEquals(txt,self.textin)
-
-        inf = StringIO(self.textout7)
-        bsf = UnPadToBlockSize(inf,7,mode="r")
-        self.assertEquals(bsf.read(1),self.textin[0])
-        self.assertEquals(bsf.read(1),self.textin[1])
-
-        inf = StringIO(self.textin)
-        bsf = PadToBlockSize(inf,7,mode="r")
-        txt = bsf.read()
-        self.assertEquals(txt,self.textout7)
-
-        inf = StringIO(self.textin)
-        bsf = PadToBlockSize(inf,7,mode="r")
-        self.assertEquals(bsf.read(1),self.textout7[0])
-        self.assertEquals(bsf.read(1),self.textout7[1])
-        
-        
-    def test_readLen(self):
-        """Test reading at blocksize=len"""
-        inf = StringIO(self.textin+"Z"+"X"*(len(self.textin)-1))
-        bsf = UnPadToBlockSize(inf,len(self.textin),mode="r")
-        txt = bsf.read()
-        self.assertEquals(txt,self.textin)
-
-        inf = StringIO(self.textin)
-        bsf = PadToBlockSize(inf,len(self.textin),mode="r")
-        txt = bsf.read()
-        self.assertEquals(txt,self.textin+"Z"+"X"*(len(self.textin)-1))
+    def test_read_empty_file(self):
+        # The empty file should still yield padding
+        f = self.makeFile("","r")
+        self.assertEquals(f.read(),"Z"+"X"*(f.blocksize-1))
 
 
-    def test_EmptyFile(self):
-        """Test PadToBlockSize with empty files."""
-        inf = StringIO("")
-        pad = PadToBlockSize(inf,8,mode="r")
-        self.assertEquals("".join(pad),"ZXXXXXXX")
-        inf = StringIO("ZXXXXXXX")
-        unpad = UnPadToBlockSize(inf,8,mode="r")
-        self.assertEquals("".join(unpad),"")
+class Test_PadToBlockSize_7(Test_PadToBlockSize_5):
+    """Testcases for PadToBlockSize."""
+
+    contents = "this is som\n sample textZXXX"
+    text_plain = ["Zhis is sample texty"]
+    text_padded = ["Zhis is sample textyZ"]
+    blocksize = 7
 
 
 #############
@@ -1221,9 +1233,10 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize5))
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize7))
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize24))
+    suite.addTest(unittest.makeSuite(Test_PadToBlockSize_5))
+    suite.addTest(unittest.makeSuite(Test_PadToBlockSize_7))
 #    suite.addTest(unittest.makeSuite(Test_CryptFiles))
 #    suite.addTest(unittest.makeSuite(Test_Head))
-#    suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
 #    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
 #    try:
 #      if bz2:
