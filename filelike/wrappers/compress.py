@@ -29,7 +29,8 @@ each building other compression wrappers.
 
 import filelike
 from filelike.wrappers import FileWrapper
-from filelike.wrappers.translate import Translate
+from filelike.wrappers.translate import ReadStreamTranslate
+from filelike.wrappers.translate import WriteStreamTranslate
 
 import unittest
 from StringIO import StringIO
@@ -37,20 +38,51 @@ from StringIO import StringIO
 import bz2
 
 
-class Compress(Translate):
-    """Abstract base class for compressing files.
+class CompressMixin(object):
+    """Abstract base mixin class for files managing (de)compression.
 
-    Instances of this class represent the compressed version of a file - 
-    all data read from the file is compressed on demand, and all data
-    written to the file is uncompressed.
+    """
 
-    Subclasses need to provide the 'compress' and 'decompress' methods.
+    def __init__(self,*args,**kwds):
+        self._reset_compressor()
+        self._reset_decompressor()
+        super(CompressMixin,self).__init__(*args,**kwds)
+
+    def _reset_compressor(self):
+        self.__compressor = self._make_compressor()
+        def compress(data):
+            return self.__compressor.compress(data)
+        def c_flush():
+            try:
+                f = self.__compressor.flush
+            except AttributeError:
+                return ""
+            return f()
+        compress.flush = c_flush
+        self.compress = compress
+
+
+class ReadCompress(ReadStreamTranslate):
+    """Abstract base class for compressing files during reading.
+
+    Instances of this class represent the compressed version of a file;
+    all data read from the file is compressed on demand.
     """
 
     def __init__(self,fileobj,mode=None):
-        super(Compress,self).__init__(fileobj,mode=mode,
-                                       rfunc=self.compress,
-                                       wfunc=self.decompress)
+        super(ReadCompress,self).__init__(fileobj,mode="r",
+                                          rfunc=self.compress_factory)
+
+class WriteCompress(WriteStreamTranslate):
+    """Abstract base class for compressing files during reading.
+
+    Instances of this class represent the compressed version of a file;
+    all data read from the file is compressed on demand.
+    """
+
+    def __init__(self,fileobj,mode=None):
+        super(ReadCompress,self).__init__(fileobj,mode="r",
+                                          rfunc=self.compress_factory)
 
 
 class Decompress(Translate):
@@ -60,7 +92,8 @@ class Decompress(Translate):
     all data read from the file is decompressed on demand, and all data
     written to the file is compressed.
 
-    Subclasses need to provide the 'compress' and 'decompress' methods.
+    Subclasses need to provide the 'compress' and 'decompress' methods,
+    probably be done by combining with a subclass of CompressMixin.
     """
 
     def __init__(self,fileobj,mode=None):
@@ -69,69 +102,19 @@ class Decompress(Translate):
                                        wfunc=self.compress)
 
 
-class CompressMixin(object):
-
-    def __init__(self,*args,**kwds):
-        def compress(data):
-            return self._compress(data)
-        def c_flush():
-            return self._flush_compress()
-        compress.flush = c_flush
-        self.compress = compress
-        def decompress(data):
-            return self._decompress(data)
-        def d_flush():
-            return self._flush_decompress()
-        decompress.flush = c_flush
-        self.decompress = decompress
-        super(CompressMixin,self).__init__(*args,**kwds)
-
-    def _compress(self,data):
-        raise NotImplementedError
-
-    def _flush_compress(self):
-        return ""
-
-    def _decompress(self,data):
-        raise NotImplementedError
-
-    def _flush_decompress(self):
-        return ""
-
 
 class BZip2Mixin(CompressMixin):
     """Mixin for Compress/UnCompress subclasses using Bzip2."""
 
     def __init__(self,*args,**kwds):
-        try:
-            cl = self.compresslevel
-        except AttributeError:
-            cl = None
-        self._compressor = bz2.BZ2Compressor(cl)
-        self._decompressor = bz2.BZ2Decompressor()
-        super(BZip2Mixin,self).__init__(*args,**kwds)
+        if not hasattr(self,"compresslevel"):
+            self.compresslevel = 9
 
-    def _compress(self,data):
-        return self._compressor.compress(data)
+    def _make_compressor(self):
+        return bz2.BZ2Compressor(self.compresslevel)
 
-    def _flush_compress(self):
-        return self._compressor.flush()
-
-    def _decompress(self,data):
-        return self._decompressor.decompress(data)
-
-
-class BZip2(BZip2Mixin,Compress):
-    """Class for reading and writing a bziped file.
-        
-    This class is the dual of UnBZip2 - it compresses read data, and
-    decompresses written data.  Thus BZip2(f) is the compressed version
-    of f.
-    """
-    
-    def __init__(self,fileobj,mode=None,compresslevel=9):
-        self.compresslevel = compresslevel
-        super(BZip2,self).__init__(fileobj,mode=None)
+    def _make_decompressor(self):
+        return bz2.BZ2Decompressor()
 
 
 class UnBZip2(BZip2Mixin,Decompress):
@@ -146,7 +129,20 @@ class UnBZip2(BZip2Mixin,Decompress):
     def __init__(self,fileobj,mode=None,compresslevel=9):
         self.compresslevel = compresslevel
         super(UnBZip2,self).__init__(fileobj,mode=None)
+
+
+class BZip2(BZip2Mixin,Compress):
+    """Class for reading and writing a bziped file.
+        
+    This class is the dual of UnBZip2 - it compresses read data, and
+    decompresses written data.  Thus BZip2(f) is the compressed version
+    of f.
+    """
     
+    def __init__(self,fileobj,mode=None,compresslevel=9):
+        self.compresslevel = compresslevel
+        super(BZip2,self).__init__(fileobj,mode=None)
+
 
 ##  Add handling of .bz2 files to filelike.open()
 def _BZip2_decoder(fileobj):

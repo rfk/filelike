@@ -27,7 +27,7 @@ dealing with encrypted files.
 """ 
 
 import filelike
-from filelike.wrappers.translate import Translate
+from filelike.wrappers.translate import BytewiseTranslate
 from filelike.wrappers.fixedblocksize import FixedBlockSize
 
 import unittest
@@ -60,9 +60,9 @@ class Decrypt(FixedBlockSize):
         to FileWrapper.__init__
         """
         self.setCipher(cipher)
-        myFileObj = Translate(fileobj,mode=mode,bytewise=True,
-                                      rfunc=self._rfunc,
-                                      wfunc=self._wfunc)
+        myFileObj = BytewiseTranslate(fileobj,mode=mode,
+                                              rfunc=self._rfunc,
+                                              wfunc=self._wfunc)
         super(Decrypt,self).__init__(myFileObj,self.blocksize,mode=mode)
         
     def setCipher(self,cipher):
@@ -105,9 +105,9 @@ class Encrypt(FixedBlockSize):
         to FileWrapper.__init__
         """
         self.setCipher(cipher)
-        myFileObj = Translate(fileobj,mode=mode,bytewise=True,
-                                      rfunc=self._rfunc,
-                                      wfunc=self._wfunc)
+        myFileObj = BytewiseTranslate(fileobj,mode=mode,
+                                              rfunc=self._rfunc,
+                                              wfunc=self._wfunc)
         super(Encrypt,self).__init__(myFileObj,self.blocksize,mode=mode)
 
     def setCipher(self,cipher):

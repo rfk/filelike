@@ -18,21 +18,18 @@
 # Boston, MA 02111-1307, USA.
 #
 """
-The filelike module takes care of the groundwork for implementing and
-handling objects that implement a rich file-like interface, including
-reading, writing, seeking and iteration.  It also provides a number
-of useful classes built on top of this functionality.
+
+    filelike: a python module for creating and handling file-like objects.
+
+This module takes care of the groundwork for implementing and manipulating
+objects that implement a rich file-like interface, including reading, writing,
+seeking and iteration.  It also provides a number of useful classes built on
+top of this functionality.
 
 The main class is FileLikeBase, which implements the entire file-like
 interface on top of primitive _read(), _write(), _seek() and _tell() methods.
-Subclasses may implement any or all of these methods to obtain all the
+Subclasses may implement any or all of these methods to obtain the related
 higher-level file behaviors.
-
-Two utility functions are provided for when code expects to deal with
-file-like objects:
-    
-    * is_filelike(obj):   checks that an object is file-like
-    * to_filelike(obj):   wraps a variety of objects in a file-like interface
 
 The "wrappers" subpackage contains a collection of useful classes built on
 top of this framework.  These include:
@@ -80,6 +77,12 @@ top-level filelike module:
     * join:    concatenate multiple file-like objects together so that they
                act like a single file.
 
+Two utility functions are provided for when code expects to deal with
+file-like objects:
+    
+    * is_filelike(obj):   checks that an object is file-like
+    * to_filelike(obj):   wraps a variety of objects in a file-like interface
+
 """ 
 
 __ver_major__ = 0
@@ -114,14 +117,18 @@ class FileLikeBase(object):
         
         * fileno()
         * isatty()
-        * truncate()
         * encoding
         * mode
         * name
         * newlines
+
+    It is also missing the following methods purely because of a lack of
+    code, and they may appear at some point in the future:
+
+        * truncate()
         
-    Also unlike standard file objects, all read methods share the same
-    buffer and so can be freely mixed (e.g. read(), readline(), next(), ...)
+    Unlike standard file objects, all read methods share the same buffer
+    and so can be freely mixed (e.g. read(), readline(), next(), ...)
     
     """
     
@@ -883,6 +890,17 @@ class Test_Join(Test_ReadWriteSeek):
         return join(files)
 
 
+class Test_Docs(unittest.TestCase):
+    """Unittests for our documentation."""
+
+    def test_readme(self):
+        """Check that README.txt is up-to-date."""
+        import os
+        readme = os.path.join(os.path.dirname(__file__),"..","README.txt")
+        if os.path.exists(readme):
+            self.assertEquals(open(readme).read(),__doc__)
+
+
 # Included here to avoid circular includes
 import filelike.wrappers
 
@@ -891,6 +909,7 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_StringIO))
     suite.addTest(unittest.makeSuite(Test_TempFile))
     suite.addTest(unittest.makeSuite(Test_Join))
+    suite.addTest(unittest.makeSuite(Test_Docs))
     from filelike import wrappers
     suite.addTest(wrappers.testsuite())
     from filelike import pipeline
