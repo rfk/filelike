@@ -25,7 +25,7 @@ of useful classes built on top of this functionality.
 
 The main class is FileLikeBase, which implements the entire file-like
 interface on top of primitive _read(), _write(), _seek() and _tell() methods.
-Subclasses may implement either or both of these methods to obtain all the
+Subclasses may implement any or all of these methods to obtain all the
 higher-level file behaviors.
 
 Two utility functions are provided for when code expects to deal with
@@ -42,8 +42,6 @@ top of this framework.  These include:
                   
     * Decrypt:    on-the-fly reading and writing to an encrypted file
                   (using PEP272 cipher API)
-
-    * Cat:  concatenate several files into a single file-like object
 
     * UnBZip2:    on-the-fly decompression of bzip'd files
                   (like the standard library's bz2 module, but accepts
@@ -63,6 +61,7 @@ file:
 The object in 'f' now behaves as a file-like object, transparently decrypting
 the file on-the-fly as it is read.
 
+
 The "pipeline" subpackage contains facilities for composing these wrappers
 in the form of a unix pipeline.  In the following example, 'f' will read the
 first five lines of an encrypted file:
@@ -70,9 +69,17 @@ first five lines of an encrypted file:
     from filelike.pipeline import Decrypt, Head
     f = file("some_encrypted_file.bin") > Decrypt(cipher) | Head(lines=5)
 
-Finally, the function filelike.open() mirrors the standard open function but
-tries to be clever about accessing the file - URLs are automatically fetched
-using urllib2, compressed files are decompressed on-the-fly, and so-forth.
+
+Finally, we have some useful file-handling functions provided under the
+top-level filelike module:
+
+    * open:    mirrors that standard open() function but is much cleverer;
+               URLs are automatically fetched, .bz2 files are transparently
+               decompressed, and so-on.
+
+    * join:    concatenate multiple file-like objects together so that they
+               act like a single file.
+
 """ 
 
 __ver_major__ = 0
@@ -90,7 +97,7 @@ import urlparse
 import tempfile
 
 
-class FileLikeBase:
+class FileLikeBase(object):
     """Base class for implementing file-like objects.
     
     This class takes a lot of the legwork out of writing file-like objects
@@ -222,13 +229,14 @@ class FileLikeBase:
         if whence == 1 and self._rbuffer:
             offset = offset - len(self._rbuffer)
         self._rbuffer = None
+        # Adjust for any discrepancy in actual vs apparent seek position
         if whence == 1 and self._sbuffer:
             offset = offset + len(self._sbuffer)
         self._sbuffer = None
         # Shortcut the special case of staying put
         if offset == 0 and whence == 1:
             return
-        # Try to do a whence-wise seek, if I have the appropriate method.
+        # Try to do a whence-wise seek if it is implemented.
         # Otherwise, simulate them all using an absolute seek.
         sbuf = None
         try:
@@ -365,6 +373,8 @@ class FileLikeBase:
         # If we were previusly reading, ensure position is correct
         if self._rbuffer is not None:
             self.seek(0,1)
+        # If we're actually behind the apparent position, we must also
+        # write the data in the gap.
         if self._sbuffer:
             string = self._sbuffer + string
             self._sbuffer = None
@@ -412,10 +422,8 @@ class FileLikeBase:
         
         If the keyword argument 'flushing' is true, it indicates that the
         internal write buffers are being flushed, and *all* the given data
-        is expected to be written to the file.  This typically indicates
-        that no more data will be forthcoming (e.g. the file is being closed).
-        If remaining data is returned when 'flushing' is true, an IOError
-        will be raised to the calling code.
+        is expected to be written to the file. If unwritten data is returned
+        when 'flushing' is true, an IOError will be raised.
         """
         raise IOError("Object not writable")
 
@@ -437,11 +445,20 @@ class FileLikeBase:
         raise IOError("Object not seekable")
 
     def _tell(self):
-        """Get the location of the file's internal position pointer."""
+        """Get the location of the file's internal position pointer.
+
+        This method must be implemented by subclasses that wish to be
+        seekable, and must return the position of the file's internal
+        pointer.
+
+        Due to buffering, the position seen by users of this class
+        (the "apparent position") may be different to the position
+        returned by this method (the "actual position").
+        """
         raise IOError("Object not seekable")
 
 
-class Opener:
+class Opener(object):
     """Class allowing clever opening of files.
     
     Instances of this class are callable using inst(filename,mode),
@@ -567,6 +584,125 @@ def is_filelike(obj,mode="rw"):
     return True
 
 
+class join(FileLikeBase):
+    """Class concatenating several file-like objects into a single file.
+
+    This class is similar in spirit to the unix `cat` command, except that
+    it produces a file-like object that is readable, writable and seekable.
+
+    When reading, data is read from each file in turn until it has been
+    exhausted.  Seeks and tells are calculated using the individual positions
+    of each file.
+
+    When writing, data is spread across each file according to its size,
+    and only the last file in the sequence will grow as data is appended.
+    This requires that the size of each file can be determined, either by
+    checking for a 'size' attribute or using seek/tell.
+    """
+
+    def __init__(self,files,mode=None):
+        """Filelike join constructor.
+
+        This first argument must be a sequence of file-like objects
+        that are to be joined together.  The optional second argument
+        specifies the access mode and can be used e.g. to prevent
+        writing even when the underlying files are writable.
+        """
+        super(join,self).__init__()
+        if mode:
+            self.mode = mode
+        self._files = list(files)
+        self._curFile = 0
+
+    def close(self):
+        super(join,self).close()
+        for f in self._files:
+            if hasattr(f,"close"):
+                f.close()
+
+    def flush(self):
+        super(join,self).flush()
+        for f in self._files:
+            if hasattr(f,"flush"):
+                f.flush()
+
+    def _read(self,sizehint=-1):
+        data = self._files[self._curFile].read(sizehint)
+        if data == "":
+            if self._curFile == len(self._files) - 1:
+                return None
+            else:
+                self._curFile += 1
+                return self._read(sizehint)
+        else:
+            return data
+
+    def _write(self,data,flushing=False):
+        cf = self._files[self._curFile]
+        # If we're at the last file, just write it all out
+        if self._curFile == len(self._files) - 1:
+            cf.write(data)
+            return None
+        # Otherwise, we may need to write into multiple files
+        pos = cf.tell()
+        try:
+            size = cf.size
+        except AttributeError:
+            cf.seek(0,2)
+            size = cf.tell()
+            cf.seek(pos,0)
+        # If the data will all fit in the current file, just write it
+        gap = size - pos
+        if gap >= len(data):
+            cf.write(data)
+            return None
+        # Otherwise, split up the data and recurse
+        cf.write(data[:gap])
+        self._curFile += 1
+        return self._write(data[gap:],flushing=flushing)
+
+    def _seek(self,offset,whence):
+        # Seek-from-end simulated using seek-to-end, then relative seek.
+        if whence == 2:
+            for f in self._files[self._curFile:]:
+                f.seek(0,2)
+            self._curFile = len(self._files)-1
+            self._seek(offset,1)
+        # Absolute seek simulated using tell() and relative seek.
+        elif whence == 0:
+            offset = offset - self._tell()
+            self._seek(offset,1)
+        # Relative seek
+        elif whence == 1:
+            # Working backwards, we simply rewind each file until
+            # the offset is small enough to be within the current file
+            if offset < 0:
+                off1 = self._files[self._curFile].tell()
+                while off1 < -1*offset:
+                    offset += off1
+                    self._files[self._curFile].seek(0,0)
+                    # If seeking back past start of first file, stop at zero
+                    if self._curFile == 0:
+                        return None
+                    self._curFile -= 1
+                    off1 = self._files[self._curFile].tell()
+                self._files[self._curFile].seek(offset,1)
+            # Working forwards, we wind each file forward to its end,
+            # then seek backwards once we've gone too far.
+            elif offset > 0:
+                offset += self._files[self._curFile].tell()
+                self._files[self._curFile].seek(0,2)
+                offset -= self._files[self._curFile].tell()
+                while offset > 0:
+                    self._curFile += 1
+                    self._files[self._curFile].seek(0,2)
+                    offset -= self._files[self._curFile].tell()
+                self.seek(offset,1)
+
+    def _tell(self):
+        return sum([f.tell() for f in self._files[:self._curFile+1]])
+    
+
 
 def to_filelike(obj,mode="rw"):
     """Convert 'obj' to a file-like object if possible.
@@ -605,7 +741,9 @@ def to_filelike(obj,mode="rw"):
     raise ValueError("Could not make object file-like: %s", (obj,))
 
 
+
 ## TODO: unittests for is_filelike and to_filelike
+
 
 class Test_Read(unittest.TestCase):
     """Generic file-like testcases for readable files."""
@@ -657,8 +795,6 @@ class Test_Read(unittest.TestCase):
 class Test_ReadWrite(Test_Read):
     """Generic file-like testcases for writable files."""
 
-    contents = "Once upon a time, in a galaxy far away,\nGuido van Rossum was a space alien."
-
     def setUp(self):
         self.file = self.makeFile(self.contents,"a+")
 
@@ -677,8 +813,6 @@ class Test_ReadWrite(Test_Read):
 
 class Test_ReadWriteSeek(Test_ReadWrite):
     """Generic file-like testcases for seekable files."""
-
-    contents = "Once upon a time, in a galaxy far away,\nGuido van Rossum was a space alien."
 
     def test_seek_tell(self):
         self.assertEquals(self.file.tell(),0)
@@ -734,6 +868,25 @@ class Test_TempFile(Test_ReadWriteSeek):
         return f
 
 
+class Test_Join(Test_ReadWriteSeek):
+    """Run our testcases against filelike.join."""
+
+    def makeFile(self,contents,mode):
+        files = []
+        files.append(StringIO(contents[0:5]))
+        files.append(StringIO(contents[5:8]))
+        files.append(StringIO(contents[8:]))
+        return join(files)
+
+
+def testfile(contents):
+    files = []
+    files.append(StringIO(contents[0:5]))
+    files.append(StringIO(contents[5:8]))
+    files.append(StringIO(contents[8:]))
+    return join(files)
+
+
 # Included here to avoid circular includes
 import filelike.wrappers
 
@@ -741,10 +894,11 @@ def testsuite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(Test_StringIO))
     suite.addTest(unittest.makeSuite(Test_TempFile))
-    from filelike import wrappers
-    suite.addTest(wrappers.testsuite())
-    from filelike import pipeline
-    suite.addTest(pipeline.testsuite())
+    suite.addTest(unittest.makeSuite(Test_Join))
+#    from filelike import wrappers
+#    suite.addTest(wrappers.testsuite())
+#    from filelike import pipeline
+#    suite.addTest(pipeline.testsuite())
     return suite
 
 
