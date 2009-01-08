@@ -895,10 +895,10 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_StringIO))
     suite.addTest(unittest.makeSuite(Test_TempFile))
     suite.addTest(unittest.makeSuite(Test_Join))
-#    from filelike import wrappers
-#    suite.addTest(wrappers.testsuite())
-#    from filelike import pipeline
-#    suite.addTest(pipeline.testsuite())
+    from filelike import wrappers
+    suite.addTest(wrappers.testsuite())
+    from filelike import pipeline
+    suite.addTest(pipeline.testsuite())
     return suite
 
 

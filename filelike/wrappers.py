@@ -30,8 +30,6 @@ provide a collection of useful classes.  These include:
     * Decrypt:    on-the-fly reading and writing to an encrypted file
                   (using PEP272 cipher API)
 
-    * Cat:  concatenate several files into a single file-like object
-
     * UnBZip2:    on-the-fly decompression of bzip'd files
                   (like the standard library's bz2 module, but accepts
                   any file-like object)
@@ -99,7 +97,7 @@ class FileWrapper(FileLikeBase):
         is looked up on the wrapped file if possible.  Otherwise, it
         is not set on the object.
         """
-        FileLikeBase.__init__(self)
+        super(FileWrapper,self).__init__()
         self._fileobj = fileobj
         if mode is None:
             if hasattr(fileobj,"mode"):
@@ -112,14 +110,15 @@ class FileWrapper(FileLikeBase):
         
     def close(self):
         """Close the object for reading/writing."""
-        FileLikeBase.close(self)
+        super(FileWrapper,self).close()
         if hasattr(self._fileobj,"close"):
             self._fileobj.close()
 
     def flush(self):
         """Flush the write buffers of the file."""
-        FileLikeBase.flush(self)
-        self._fileobj.flush()
+        super(FileWrapper,self).flush()
+        if hasattr(self._fileobj,"flush"):
+            self._fileobj.flush()
     
     def _read(self,sizehint=-1):
         data = self._fileobj.read(sizehint)
@@ -188,7 +187,7 @@ class Translate(FileWrapper):
         This will increase the efficiency of some operations, in particular
         of seek() and tell().
         """
-        FileWrapper.__init__(self,fileobj,mode)
+        super(Translate,self).__init__(fileobj,mode)
         if func is not None:
             if rfunc is not None:
                 raise ValueError("Cannot specify both <func> and <rfunc>")
@@ -225,7 +224,7 @@ class Translate(FileWrapper):
         data = self._flush_wfunc()
         if data is not None:
             self._fileobj.write(data)
-        FileWrapper.flush(self)
+        super(Translate,self).flush()
 
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
@@ -304,13 +303,12 @@ class FixedBlockSize(FileWrapper):
     example, to write data to a cipher function without manually 
     chunking text to match the cipher's block size.
     
-    If the total data written to the file when it is closed is not
-    a multiple of the blocksize, it will be padded to the appropriate
-    size with null bytes.
+    No padding is added to the file is its length is not a multiple 
+    of the blocksize.
     """
     
     def __init__(self,fileobj,blocksize,mode=None):
-        FileWrapper.__init__(self,fileobj,mode)
+        super(FixedBlockSize,self).__init__(fileobj,mode)
         self.blocksize = blocksize
     
     def _round_up(self,num):
@@ -323,10 +321,9 @@ class FixedBlockSize(FileWrapper):
 
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
-        if sizehint <= 0:
-            sizehint = self._bufsize
-        size = self._round_up(sizehint)
-        data = self._fileobj.read(size)
+        if sizehint >= 0:
+            sizehint = self._round_up(sizehint)
+        data = self._fileobj.read(sizehint)
         if data == "":
             return None
         return data
@@ -335,9 +332,8 @@ class FixedBlockSize(FileWrapper):
         """Write the given string to the file.
 
         When flushing data to the file, it may need to be padded to the
-        block size.  First we attempt to read additional data from the
-        underlying file to use for the padding, but if this fails then
-        we pad with null bytes.
+        block size.  We attempt to read additional data from the
+        underlying file to use for the padding.
         """
         size = self._round_down(len(data))
         self._fileobj.write(data[:size])
@@ -345,16 +341,13 @@ class FixedBlockSize(FileWrapper):
             return ""
         if not flushing:
             return data[size:]
-        # Flushing, so we need to pad the data.
-        # Try to find existing contents, use null bytes otherwise
+        # Flushing, so we need to try to pad the data with existing contents.
+        # If we can't find such contents, just write at non-blocksize.
         if self._check_mode("r"):
             nextBlock = self._fileobj.read(self.blocksize)
             self._fileobj.seek(-1*len(nextBlock),1)
-            lenNB = len(nextBlock)
-            if lenNB < self.blocksize:
-                nextBlock = nextBlock + "\0"*(self.blocksize-lenNB)
         else:
-            nextBlock = "\0" * self.blocksize
+            nextBlock = ""
         padstart = len(data) - size
         self._fileobj.write(data[size:] + nextBlock[padstart:])
         # Seek back to start of previous block, if the file is readable.
@@ -380,11 +373,9 @@ class FixedBlockSize(FileWrapper):
             diff = offset - boundary - len(data)
             if diff > 0:
                 # Seeked past end of file.  Actually do this on fileobj, so
-                # that it will raise an error if appropriate.  If it doesn't
-                # then we'll pad with null bytes.
+                # that it will raise an error if appropriate.
                 self._fileobj.seek(diff,1)
                 self._fileobj.seek(-1*diff,1)
-                data = data + "\0"*diff
             else:
                 self._fileobj.seek(-1*len(data),1)
             return data[:(offset-boundary)]
@@ -1021,69 +1012,6 @@ class Test_Head(unittest.TestCase):
         self.assertEquals(txt,self.intext.split("\n")[0]+"\n")
 
 
-class Cat(FileWrapper):
-    """Class concatenating several file-like objects.
-    
-    This is similar in functionality to the unix `cat` command.
-    Data is read from each file in turn, until all have been
-    exhausted.
-    
-    Since this doesnt make sense when writing to a file, the access
-    mode is assumed to be "r" and cannot be set or modified. Each
-    file is closed at the time of closing the wrapper.
-    """
-    
-    def __init__(self,*files):
-        """Cat wrapper constructor.
-        This function accepts any number of file-like objects as its
-        only arguments.  Data will be read from them in the order they
-        are provided.
-        """
-        FileWrapper.__init__(self,None,"r")
-        self._files = files
-        self._curFile = 0
-    
-    def close(self):
-        FileWrapper.close(self)
-        for f in self._files:
-            if hasattr(f,"close"):
-                f.close()
-    
-    def _read(self,sizehint=-1):
-        if len(self._files) <= self._curFile:
-            return None
-        data = self._files[self._curFile].read(sizehint)
-        if not len(data):
-            self._curFile += 1
-            data = self._read(sizehint)
-        return data
-    
-    def _write(self,data):
-        raise IOError("Cat wrapper cannot be written to.")
-
-
-class Test_Cat(unittest.TestCase):
-    """Testcases for the filelike.Cat wrapper."""
-    
-    def setUp(self):
-        self.intext1 = "Guido van Rossum\n is a space\n alien."
-        self.intext2 = "But that's ok with me!"
-        self.intext3 = "What do you think?"
-        self.infile1 = StringIO(self.intext1)
-        self.infile2 = StringIO(self.intext2)
-        self.infile3 = StringIO(self.intext3)
-
-    def tearDown(self):
-        pass
-
-    def test_basic(self):
-        """Test basic concatenation of files."""
-        fs = Cat(self.infile1,self.infile2,self.infile3)
-        txt = "".join(fs.readlines())
-        txtC = "".join([self.intext1,self.intext2,self.intext3])
-        self.assertEquals(txt,txtC)
-
-
 class Compress(Translate):
     """Compress a file using an arbitrary compression routine.
 
@@ -1296,7 +1224,6 @@ def testsuite():
 #    suite.addTest(unittest.makeSuite(Test_CryptFiles))
 #    suite.addTest(unittest.makeSuite(Test_Head))
 #    suite.addTest(unittest.makeSuite(Test_PadToBlockSize))
-#    suite.addTest(unittest.makeSuite(Test_Cat))
 #    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
 #    try:
 #      if bz2:

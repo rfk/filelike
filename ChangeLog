@@ -1,14 +1,18 @@
 
 Version 0.3.0
 
-   * Added support for seek() and tell() methods
+   * Added support for seek() and tell()
+   * Added filelike.join() for concatenating several files
+     into one file-like object
    * Added support for context-manager protocol
    * Much better support for intermingled reads and writes
-   * Restructed the 'wrappers' module to provide a consistent
+   * Restructured the 'wrappers' module to provide a consistent
      naming scheme
       * all wrapper classes are now read-wise verbs, e.g.
         Decrypt(f) will decrypt all reads from f, and encrypt
         all writes.
+      * removed 'Cat' in favour of filelike.join
+   * Switched to new-style classes throughout
 
 Version 0.2.2
 
