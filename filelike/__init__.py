@@ -883,13 +883,6 @@ class Test_Join(Test_ReadWriteSeek):
         return join(files)
 
 
-def testfile():
-    txt = "This is Zome Zample TeZTZ"
-    f = wrappers.UnPadToBlockSize(StringIO(""),16)
-    f._fileobj = StringIO(txt + f._padding(txt))
-    return f
-
-
 # Included here to avoid circular includes
 import filelike.wrappers
 
@@ -900,8 +893,8 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_Join))
     from filelike import wrappers
     suite.addTest(wrappers.testsuite())
-#    from filelike import pipeline
-#    suite.addTest(pipeline.testsuite())
+    from filelike import pipeline
+    suite.addTest(pipeline.testsuite())
     return suite
 
 

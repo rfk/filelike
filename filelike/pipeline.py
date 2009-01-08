@@ -221,43 +221,12 @@ class PipelineStack:
         return obj
 
 
-class Test_Pipeline(unittest.TestCase):
-    """Testcases for the construction of pipelines."""
-    
-    def setUp(self):
-        from Crypto.Cipher import DES
-        # Example inspired by the PyCrypto manual
-        self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
-        self.plaintextin = "Guido van Rossum is a space alien."
-        self.plaintextout = "Guido van Rossum is a space alien." + "\0"*6
-        self.ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
-        self.plainfile = StringIO(self.plaintextin)
-        self.cryptfile = StringIO(self.ciphertext)
-        self.outfile = StringIO()
-
-    def tearDown(self):
-        pass
-
-    def test_ReaderLine(self):
-        """Test a simple reading pipeline."""
-        pf = self.ciphertext > Decrypt(self.cipher) | Head(bytes=10)
-        txt = pf.read()
-        self.assertEquals(txt,self.plaintextout[:10])
-
-    def test_WriterLine(self):
-        """Test a simple writer pipeline."""
-        pf = Decrypt(self.cipher) | Head(bytes=15) | FixedBlockSize(10) > self.outfile
-        pf.write(self.plaintextin)
-        pf.flush()
-        txt = self.outfile.getvalue()
-        self.assertEquals(txt,self.ciphertext[:15])
-
-
 def pipeline(cls):
     """Create a PipelineEntry factory function using given class."""
     def create_entry(*args,**kwds):
         return PipelineEntry(cls,*args,**kwds)
     return create_entry
+
 
 ##  Create a PipelineEntry factory for each wrapper
 ##  defined in filelike.wrappers
@@ -272,13 +241,39 @@ for nm in dir(wrappers):
         pass
 
 
+class Test_Pipeline(unittest.TestCase):
+    """Testcases for the construction of pipelines."""
+    
+    def setUp(self):
+        from Crypto.Cipher import DES
+        # Example inspired by the PyCrypto manual
+        self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
+        self.plaintext = "Guido van Rossum is a space alien." + "\0"*6
+        self.ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
+        self.plainfile = StringIO(self.plaintext)
+        self.cryptfile = StringIO(self.ciphertext)
+        self.outfile = StringIO()
+
+    def tearDown(self):
+        pass
+
+    def test_ReaderLine(self):
+        """Test a simple reading pipeline."""
+        pf = self.ciphertext > Decrypt(self.cipher) | Head(bytes=10)
+        txt = pf.read()
+        self.assertEquals(txt,self.plaintext[:10])
+
+    def test_WriterLine(self):
+        """Test a simple writer pipeline."""
+        pf = Decrypt(self.cipher) | Head(bytes=15) | FixedBlockSize(10) > self.outfile
+        pf.write(self.plaintext)
+        pf.flush()
+        txt = self.outfile.getvalue()
+        self.assertEquals(txt,self.ciphertext[:15])
+
+
 def testsuite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(Test_Pipeline))
     return suite
-
-
-# Run regression tests when called from comand-line
-if __name__ == "__main__":
-    UnitTest.TextTestRunner().run(testsuite())
     
