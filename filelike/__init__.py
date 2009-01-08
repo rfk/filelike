@@ -634,7 +634,11 @@ class Test_Read(unittest.TestCase):
 
     def test_readline(self):
         c = self.file.readline()
-        self.assertEquals(c,self.contents.split("\n")[0]+"\n")
+        if self.contents.find("\n") < 0:
+            extra = ""
+        else:
+            extra = "\n"
+        self.assertEquals(c,self.contents.split("\n")[0]+extra)
 
     def test_readlines(self):
         cs = [ln.strip() for ln in self.file.readlines()]
