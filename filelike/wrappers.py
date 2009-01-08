@@ -56,6 +56,7 @@ import unittest
 from StringIO import StringIO
 import warnings
 import tempfile
+import bz2
 
 
 def _deprecate(oldName,newClass):
@@ -196,12 +197,13 @@ class Translate(FileWrapper):
             self._rfunc = func
             self._wfunc = func
         else:
-            if "r" in self.mode or "+" in self.mode:
+            if hasattr(self,"mode"):
+              if "r" in self.mode or "+" in self.mode:
                 if rfunc is None:
-                    raise ValueError("Must provide <rfunc> for readable files")
-            if "w" in self.mode or "a" in self.mode:
+                  raise ValueError("Must provide <rfunc> for readable files")
+              if "w" in self.mode or "a" in self.mode:
                 if wfunc is None:
-                    raise ValueError("Must provide <wfunc> for writable files")
+                  raise ValueError("Must provide <wfunc> for writable files")
             self._rfunc = rfunc
             self._wfunc = wfunc
         self.bytewise = bytewise
@@ -934,7 +936,8 @@ class Head(FileWrapper):
     
     def __init__(self,fileobj,mode=None,bytes=None,lines=None):
         """Head wrapper constructor.
-        The arguments <bytes> and <lines> specify the maximum number
+
+        The arguments 'bytes' and 'lines' specify the maximum number
         of bytes and lines to be read or written.  Reading/writing
         will terminate when one of the given values has been exceeded.
         Any extraneous data is simply discarded.
@@ -1103,132 +1106,146 @@ class Test_Head(unittest.TestCase):
         self.assertEquals(txt,self.intext.split("\n")[0]+"\n")
 
 
+
 class Compress(Translate):
-    """Compress a file using an arbitrary compression routine.
+    """Abstract base class for compressing files.
 
-    All reads from the file are processed using self._compress, while
-    all writes are passed through self._decompress.  Thus Compress(fobj)
-    can be seen as the compressed version of fobj.
+    Instances of this class represent the compressed version of a file - 
+    all data read from the file is compressed on demand, and all data
+    written to the file is uncompressed.
 
-    Subclasses must implement _compress and _decompress.
+    Subclasses need to provide the 'compress' and 'decompress' methods.
     """
 
     def __init__(self,fileobj,mode=None):
-        Translate.__init__(self,fileobj,mode=mode,
-                           rfunc=self._compress,
-                           wfunc=self._decompress)
+        super(Compress,self).__init__(fileobj,mode=mode,
+                                       rfunc=self.compress,
+                                       wfunc=self.decompress)
 
-class UnCompress(Translate):
-    """Decompress a file using an arbitrary compression routine.
 
-    All reads from the file are processed using self._decompress, while
-    all writes are passed through self._compress.  Thus UnCompress(fobj)
-    can be seen as the decompressed version of fobj.
+class Decompress(Translate):
+    """Abstract base class for decompressing files.
 
-    Subclasses must implement _compress and _decompress.
+    Instances of this class represent the decompressed version of a file - 
+    all data read from the file is decompressed on demand, and all data
+    written to the file is compressed.
+
+    Subclasses need to provide the '_compress' and '_decompress' methods.
     """
 
     def __init__(self,fileobj,mode=None):
-        Translate.__init__(self,fileobj,mode=mode,
-                           rfunc=self._decompress,
-                           wfunc=self._compress)
+        super(Compress,self).__init__(fileobj,mode=mode,
+                                       rfunc=self.decompress,
+                                       wfunc=self.compress)
 
 
-## Conditionally provide bz2 compression support
-try:
-    import bz2
-    class BZ2Wrapper:
-        """Mixin for wrapping files with BZ2 [de]compression.
+class CompressMixin(object):
 
-        This class sets up _compress and _decompress as appropriate for
-        BZ2 handling.  It should be mixed-in with one of CompressFile or
-        DecompressFile, with BZ2Wrapper.__init__ called first.
-        """
+    def __init__(self,*args,**kwds):
+        def compress(data):
+            return self._compress(data)
+        def c_flush():
+            if self.__closing:
+                return self._flush_compress()
+            return ""
+        compress.flush = c_flush
+        self.compress = compress
+        def decompress(data):
+            return self._decompress(data)
+        def d_flush():
+            if self.__closing:
+                return self._flush_decompress()
+            return ""
+        decompress.flush = c_flush
+        self.decompress = decompress
+        self.__closing = False
+        super(CompressMixin,self).__init__(*args,**kwds)
 
-        def __init__(self,compresslevel=9):
-            """BZ2Wrapper Constructor.
+    def close(self):
+        self.__closing = True
+        super(CompressMixin,self).close()
 
-            <fileobj> is the file object with compressed contents.  <mode>
-            is the file access mode. <compresslevel> an integer between 1
-            and 9 giving the compression level.
-            
-            This does not support simultaneous reading and writing of a BZ2
-            wrapped file, so mode must be either 'r' or 'w'.
-            """
-            # Create self._compress to handle compression
-            compressor = bz2.BZ2Compressor(compresslevel)
-            toFlush = {'c': False}
-            def cfunc(data):
-                toFlush['c'] = True
-                return compressor.compress(data)
-            def cflush():
-                if not toFlush['c']:
-                  return None
-                data = compressor.flush()
-                del cfunc.flush
-                return data
-            cfunc.flush = cflush
-            self._compress = cfunc
-            # Create self._decompress to handle decompression
-            decompressor = bz2.BZ2Decompressor()
-            def dfunc(data):
-                return decompressor.decompress(data)
-            self._decompress = dfunc
+    def _compress(self,data):
+        raise NotImplementedError
+
+    def _flush_compress(self):
+        return ""
+
+    def _decompress(self,data):
+        raise NotImplementedError
+
+    def _flush_decompress(self):
+        return ""
 
 
-    class BZip2(BZ2Wrapper,Compress):
-        """Class for reading and writing a bziped file.
+class BZip2Mixin(CompressMixin):
+    """Mixin for Compress/UnCompress subclasses using Bzip2."""
+
+    def __init__(self,*args,**kwds):
+        try:
+            cl = self.compresslevel
+        except AttributeError:
+            cl = None
+        self._compressor = bz2.BZ2Compressor(cl)
+        self._decompressor = bz2.BZ2Decompressor()
+        super(BZip2Mixin,self).__init__(*args,**kwds)
+
+    def _compress(self,data):
+        return self._compressor.compress(data)
+
+    def _flush_compress(self):
+        return self._compressor.flush()
+
+    def _decompress(self,data):
+        return self._decompressor.decompress(data)
+
+
+class BZip2(BZip2Mixin,Compress):
+    """Class for reading and writing a bziped file.
         
-        This class is the dual of UnBZip2 - it compresses read data, and
-        decompresses written data.  Thus BZip2(f) is the compressed version
-        of f.
-        """
+    This class is the dual of UnBZip2 - it compresses read data, and
+    decompresses written data.  Thus BZip2(f) is the compressed version
+    of f.
+    """
     
-        def __init__(self,fileobj,mode=None,compresslevel=9):
-            """BZip2 Constructor.
+    def __init__(self,fileobj,mode=None,compresslevel=9):
+        self.compresslevel = compresslevel
+        super(BZip2,self).__init__(fileobj,mode=None)
 
-            <fileobj> is the file object with compressed contents.  <mode>
-            is the file access mode. <compresslevel> an integer between 1
-            and 9 giving the compression level.
-            """
-            BZ2Wrapper.__init__(self,compresslevel)
-            Compress.__init__(self,fileobj,mode)
 
-    class UnBZip2(BZ2Wrapper,UnCompress):
-        """Class for reading and writing to a un-bziped file.
+class UnBZip2(BZip2Mixin,Decompress):
+    """Class for reading and writing to a un-bziped file.
         
-        This class behaves almost exactly like the bz2.BZ2File class from
-        the standard library, except that it accepts an arbitrary file-like
-        object and it does not support seek() or tell().  All reads from
-        the file are decompressed, all writes are compressed.
-        """
+    This class behaves almost exactly like the bz2.BZ2File class from
+    the standard library, except that it accepts an arbitrary file-like
+    object.  All reads from the file are decompressed, all writes are
+    compressed.
+    """
     
-        def __init__(self,fileobj,mode=None,compresslevel=9):
-            """UnBZip2 Constructor.
+    def __init__(self,fileobj,mode=None,compresslevel=9):
+        self.compresslevel = compresslevel
+        super(BZip2,self).__init__(self,fileobj,mode=None)
+    
 
-            <fileobj> is the file object with compressed contents.  <mode>
-            is the file access mode. <compresslevel> an integer between 1
-            and 9 giving the compression level.
-            """
-            BZ2Wrapper.__init__(self,compresslevel)
-            UnCompress.__init__(self,fileobj,mode)
-    
-    _deprecate("BZ2File",UnBZip2)
+_deprecate("BZ2File",UnBZip2)
 
-    ##  Add handling of .bz2 files to filelike.open()
-    def _BZip2_decoder(fileobj):
-        """Decoder function for handling .bz2 files with filelike.open"""
-        if not fileobj.name.endswith(".bz2"):
-            return None
-        if "a" in fileobj.mode:
-            raise IOError("Cannot open .bz2 files in append mode")
-        f = UnBZip2(fileobj)
-        f.name = fileobj.name[:-4]
-        return f
-    filelike.open.decoders.append(_BZip2_decoder)
+##  Add handling of .bz2 files to filelike.open()
+def _BZip2_decoder(fileobj):
+    """Decoder function for handling .bz2 files with filelike.open"""
+    if not fileobj.name.endswith(".bz2"):
+        return None
+    f = UnBZip2(fileobj)
+    f.name = fileobj.name[:-4]
+    return f
+filelike.open.decoders.append(_BZip2_decoder)
     
-except ImportError:
-    pass
+class Test_BZip2(filelike.Test_ReadWriteSeek):
+    """Tetcases for BZip2 wrapper class."""
+
+    contents = bz2.compress("This is my uncompressed\n test data")
+
+    def makeFile(self,contents,mode):
+        return BZip2(StringIO(bz2.decompress(contents)),mode)
 
 
 class Test_OpenerDecoders(unittest.TestCase):
@@ -1252,7 +1269,7 @@ class Test_OpenerDecoders(unittest.TestCase):
     
     def test_RemoteBzFile(self):
         """Test opening a remote BZ2 file."""
-        f = filelike.open("http://www.rfk.id.au/scratch/test.txt.bz2")
+        f = filelike.open("http://www.rfk.id.au/static/scratch/test.txt.bz2")
         self.assertEquals(f.read(),"content goes here if you please.\n")
 
 
@@ -1311,12 +1328,10 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_UnPadToBlockSize16))
     suite.addTest(unittest.makeSuite(Test_Encrypt))
     suite.addTest(unittest.makeSuite(Test_Decrypt))
+    suite.addTest(unittest.makeSuite(Test_BZip2))
 #    suite.addTest(unittest.makeSuite(Test_Head))
-#    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
-#    try:
-#      if bz2:
-#        suite.addTest(unittest.makeSuite(Test_Compression))
-#    except NameError:
+    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
+#   suite.addTest(unittest.makeSuite(Test_Compression))
 #      pass
     return suite
 
