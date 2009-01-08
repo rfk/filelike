@@ -398,8 +398,7 @@ class Test_FixedBlockSize5(filelike.Test_ReadWriteSeek):
         class BSFile:
             """Simulate reads/writes, asserting correct blocksize."""
             def read(s,size=-1):
-                self.assert_(size > 0)
-                self.assert_(size % self.blocksize == 0)
+                self.assert_(size < 0 or size % self.blocksize == 0)
                 return f.read(size)
             def write(s,data):
                 self.assert_(len(data)%self.blocksize == 0)
@@ -434,14 +433,16 @@ class PadToBlockSize(FileWrapper):
     to meet the block size.  This is automatically added when reading,
     and stripped when writing.  The dual of this class is UnPadToBlockSize.
 
-    This class does not align reads or writes along block boundaries.
+    This class does not necessarily align reads or writes along block
+    boundaries - use the FixedBlockSize wrapper to achieve this.
     """
 
     def __init__(self,fileobj,blocksize,mode=None):
-        FileWrapper.__init__(self,fileobj,mode)
+        super(PadToBlockSize,self).__init__(fileobj,mode)
         self.blocksize = blocksize
-        self._padseen = ""
-        self._padat = None
+        self._pad_loc = None
+        self._pad_read = ""
+        self._pad_unread = ""
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
@@ -463,24 +464,27 @@ class PadToBlockSize(FileWrapper):
         return padding
 
     def _read(self,sizehint=-1):
+        # If there is unread padding, return that
+        if self._pad_unread:
+            data = self._pad_unread
+            self._pad_read = self._pad_read + data
+            self._pad_unread = ""
+            return data
+        # If the padding has been read, return EOF
+        if self._pad_read:
+            return None
         # Always read at the blocksize, as it makes padding easier
         if sizehint > 0:
             sizehint = self._round_up(sizehint)
         data = self._fileobj.read(sizehint)
         if sizehint < 0 or len(data) < sizehint:
-            if self._pad_at is None:
-                
-            if not self._padseen:
-                self._padseen = self._padding(data)
-                data = data + self._padseen
-            else:
-                assert data == ""
-                return None
-        self._pos += len(data)
+            self._pad_loc = self._fileobj.tell()
+            self._pad_unread = self._padding(data)
         return data
 
     def _write(self,string,flushing=False):
-        # Check whether this could contain the padding block.
+        # Check whether this could contain the padding block, which
+        # will need to be removed.
         zIdx = string.rfind("Z")
         maybePad = zIdx >= len(string) - self.blocksize - 1
         for c in string[zIdx+1:]:
@@ -493,7 +497,6 @@ class PadToBlockSize(FileWrapper):
             size = self._round_down(zIdx)
         else:
             size = self._round_down(len(string))
-        self._pos += size
         self._fileobj.write(string[:size])
         leftover = string[size:]
         # If there's no leftover, well, that was easy :-)
@@ -504,14 +507,13 @@ class PadToBlockSize(FileWrapper):
             return leftover
         # If we are flushing, we need to write the leftovers.
         # If we're in the middle of the file, write out a complete block
-        # using the existing file contents.  Only works is readable...
+        # using the existing file contents.  Only works if readable...
         if self._check_mode("r"):
             lenNB = self._round_up(len(leftover))
             nextBlock = self._fileobj.read(lenNB)
             self._fileobj.seek(-1*len(nextBlock),1)
             if lenNB == len(nextBlock):
-                padstart = lenNB - len(leftover)
-                self._pos += lenNB
+                padstart = len(leftover)
                 self._fileobj.write(leftover + nextBlock[padstart:])
                 self.seek(padstart - lenNB,1)
                 return None
@@ -519,33 +521,41 @@ class PadToBlockSize(FileWrapper):
         # Remove the padding data from the leftovers
         if maybePad:
             zIdx = leftover.rfind("Z")
-            self._pos += len(leftover)
             self._fileobj.write(leftover[:zIdx])
         return None
 
     def _seek(self,offset,whence):
+        """Seek to approximately 'offset' bytes from start of while.
+
+        This method implements absolute seeks and will not seek to
+        positions beyond the end of the file.  If you try to seek past
+        the file and its padding, you'll be placed at EOF.
+        """
         if whence > 0:
             raise NotImplementedError
-        boundary = self._round_down(offset)
-        self._fileobj.seek(boundary,0)
-        if boundary == offset:
-            return ""
-        else:
-            data = self._fileobj.read(self.blocksize)
-            diff = offset - boundary - len(data)
-            if diff > 0:
-                # Seeked past end of file.  Actually do this on fileobj, so
-                # that it will raise an error if appropriate.  If it doesn't
-                # then we'll pad with the appropriate sequence.
-                self._fileobj.seek(diff,1)
-                self._fileobj.seek(-1*diff,1)
-                data = data + "Z" + "X"*(diff-1)
-            self._fileobj.seek(-1*len(data),1)
-            return data[:(offset-boundary)]
+        # Slow simulation of seek by actually re-reading all the data.
+        self._fileobj.seek(0,0)
+        self._pad_unread = ""
+        self._pad_read = ""
+        data = self._fileobj.read(offset)
+        boundary = self._round_down(len(data))
+        # 1) We're within the file, so it's nice and easy
+        if len(data) == offset:
+            self._fileobj.seek(boundary-offset,1)
+            return data[boundary:offset]
+        # 2) We're past the underlying file.
+        padding = self._padding(data)
+        self._fileobj.seek(boundary-len(data),1)
+        diff = offset - len(data)
+        # If we're inside the padding, only return what's necessary.
+        # Otherwise, we've seeked to the end of the whole thing.
+        if diff <= len(padding):
+            padding = padding[:diff]
+        return data[boundary:] + padding
 
     def _tell(self):
-        return self._pos
-        
+        return self._fileobj.tell() + len(self._pad_read)
+
 
 class UnPadToBlockSize(FileWrapper):
     """Class removing block-size padding from a file.
@@ -556,8 +566,9 @@ class UnPadToBlockSize(FileWrapper):
     """
     
     def __init__(self,fileobj,blocksize,mode=None):
-        FileWrapper.__init__(self,fileobj,mode)
+        super(UnPadToBlockSize,self).__init__(fileobj,mode)
         self.blocksize = blocksize
+        self._pad_seen = ""
 
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
@@ -571,13 +582,12 @@ class UnPadToBlockSize(FileWrapper):
             return num
         return (num/self.blocksize) * self.blocksize
     
-    def _pad_to_size(self,data):
-        """Pad data to make it an appropriate size."""
-        data = data + "Z"
-        size = self._round_up(len(data))
-        if len(data) < size:
-            data = data + ("X"*(size-len(data)))
-        return data
+    def _padding(self,data):
+        """Get the padding needed to make 'data' match the blocksize."""
+        padding = "Z"
+        size = self._round_up(len(data)+1)
+        padding = padding + ("X"*(size-len(data)-1))
+        return padding
     
     def _read(self,sizehint=-1):
         """Read approximately <sizehint> bytes from the file."""
@@ -585,19 +595,20 @@ class UnPadToBlockSize(FileWrapper):
             sizehint = self._round_up(sizehint)
         data = self._fileobj.read(sizehint)
         # If we might be near the end, read far enough ahead to find the pad
-        if data == "X"*self.blocksize:
-            newData = self._fileobj.read(self.blocksize)
-            sizehint += self.blocksize
-            data = data + newData
         zIdx = data.rfind("Z")
-        if zIdx >= 0:
-            while zIdx >= (len(data) - self.blocksize - 1):
+        if sizehint >= 0:
+            if data == "X"*self.blocksize:
                 newData = self._fileobj.read(self.blocksize)
                 sizehint += self.blocksize
                 data = data + newData
-                zIdx = data.rfind("Z")
-                if newData == "":
-                    break
+            if zIdx >= 0:
+                while zIdx >= (len(data) - self.blocksize - 1):
+                    newData = self._fileobj.read(self.blocksize)
+                    sizehint += self.blocksize
+                    data = data + newData
+                    zIdx = data.rfind("Z")
+                    if newData == "":
+                        break
         # Return the data, stripping the pad if we're at the end
         if data == "":
             return None
@@ -606,7 +617,10 @@ class UnPadToBlockSize(FileWrapper):
                 assert len(data) <= self.blocksize
                 return None
             else:
+                self._pad_seen = data[zIdx:]
                 return data[:zIdx]
+        else:
+            return data
 
     def _write(self,data,flushing=False):
         """Write the given string to the file."""
@@ -622,42 +636,45 @@ class UnPadToBlockSize(FileWrapper):
             nextBlock = self._fileobj.read(lenNB)
             self._fileobj.seek(-1*len(nextBlock),1)
             if lenNB == len(nextBlock):
-                padstart = lenNB - len(leftover)
+                padstart = len(leftover)
                 self._fileobj.write(leftover + nextBlock[padstart:])
                 self.seek(padstart - lenNB,1)
                 return None
         # Otherwise, we must be at the end of the file.
-        self._fileobj.write(self._pad_to_size(leftover))
+        padding = self._padding(leftover)
+        self._fileobj.write(leftover + padding)
+        self._pad_seen = padding
         return None
 
     def _seek(self,offset,whence):
         if whence > 0:
             raise NotImplementedError
+        self._fileobj.seek(0,0)
+        self._pad_seen = ""
+        data = self._fileobj.read(offset)
+        eof = data.rfind("Z")
+        if len(data) < offset:
+            offset = eof
+        elif eof > len(data) - self.blocksize - 1:
+            extra = self._fileobj.read(self.blocksize+1)
+            data = data + extra
+            if len(extra) <= self.blocksize:
+                eof = data.rfind("Z")
+                if eof < offset:
+                    offset = eof
         boundary = self._round_down(offset)
-        self._fileobj.seek(boundary,0)
-        if boundary == offset:
-            return ""
-        else:
-            data = self._fileobj.read(offset - boundary)
-            diff = offset - boundary - len(data)
-            if diff > 0:
-                # Seeked past end of file.  Actually do this on fileobj, so
-                # that it will raise an error if appropriate.  If it doesn't
-                # then we'll pad with null bytes.
-                self._fileobj.seek(diff,1)
-                self._fileobj.seek(-1*diff,1)
-                data = data + "\0"*diff
-            else:
-                self._fileobj.seek(-1*len(data),1)
-            return data[:(offset-boundary)]
+        self._fileobj.seek(boundary-len(data),1)
+        return data[boundary:offset]
 
+    def _tell(self):
+        return self._fileobj.tell() - len(self._pad_seen)
 
 
 _deprecate("PaddedToBlockSizeFile",UnPadToBlockSize)
 
 
-class Test_PadToBlockSize_5(filelike.Test_ReadWriteSeek):
-    """Testcases for PadToBlockSize."""
+class Test_PadToBlockSize5(filelike.Test_ReadWriteSeek):
+    """Testcases for PadToBlockSize with blocksize=5."""
 
     contents = "this is some sample textZ"
     text_plain = ["Zhis is sample texty"]
@@ -678,6 +695,7 @@ class Test_PadToBlockSize_5(filelike.Test_ReadWriteSeek):
     def test_padding(self):
         for (plain,padded) in zip(self.text_plain,self.text_padded):
             f = self.makeFile(padded,"rw")
+            self.assert_(len(padded) % self.blocksize == 0)
             self.assertEquals(f._fileobj.getvalue(),plain)
 
     def test_read_empty_file(self):
@@ -685,9 +703,19 @@ class Test_PadToBlockSize_5(filelike.Test_ReadWriteSeek):
         f = self.makeFile("","r")
         self.assertEquals(f.read(),"Z"+"X"*(f.blocksize-1))
 
+    def test_write_zeds(self):
+        f = self.makeFile("","w")
+        txt = "test data Z with lots of Z's embedded in it Z"
+        f.write("test data Z w")
+        f.write("ith lots of Z's e")
+        f.write("mbedded in it Z")
+        f.write(f._padding(txt))
+        f.flush()
+        self.assertEquals(f._fileobj.getvalue(),txt)
 
-class Test_PadToBlockSize_7(Test_PadToBlockSize_5):
-    """Testcases for PadToBlockSize."""
+
+class Test_PadToBlockSize7(Test_PadToBlockSize5):
+    """Testcases for PadToBlockSize with blocksize=7."""
 
     contents = "this is som\n sample textZXXX"
     text_plain = ["Zhis is sample texty"]
@@ -695,10 +723,71 @@ class Test_PadToBlockSize_7(Test_PadToBlockSize_5):
     blocksize = 7
 
 
+class Test_PadToBlockSize16(Test_PadToBlockSize5):
+    """Testcases for PadToBlockSize with blocksize=16."""
+
+    contents = "This is Zome Zample TeZTZXXXXXXX"
+    text_plain = ["short"]
+    text_padded = ["shortZXXXXXXXXXX"]
+    blocksize = 16
+
+
+class Test_UnPadToBlockSize5(filelike.Test_ReadWriteSeek):
+    """Testcases for UnPadToBlockSize with blocksize=5."""
+
+    contents = "this is some sample text"
+    text_plain = ["Zhis is sample texty"]
+    text_padded = ["Zhis is sample textyZXXXX"]
+    blocksize = 5
+
+    def makeFile(self,contents,mode):
+        f = UnPadToBlockSize(StringIO(""),self.blocksize,mode=mode)
+        f._fileobj = StringIO(contents + f._padding(contents))
+        return f
+
+    def test_padding(self):
+        for (plain,padded) in zip(self.text_plain,self.text_padded):
+            f = self.makeFile(plain,"rw")
+            self.assertEquals(f._fileobj.getvalue(),padded)
+
+    def test_write_zeds(self):
+        f = self.makeFile("","w")
+        txt = "test data Z with lots of Z's embedded in it Z"
+        f.write("test data Z w")
+        f.write("ith lots of Z's e")
+        f.write("mbedded in it Z")
+        f.flush()
+        self.assertEquals(f._fileobj.getvalue(),txt + f._padding(txt))
+
+    def test_read_zeds(self):
+        f = self.makeFile("","r")
+        txt = "test data Z with lots of Z's embedded in it Z"
+        f._fileobj = StringIO(txt + f._padding(txt))
+        self.assertEquals(f.read(),txt)
+
+
+class Test_UnPadToBlockSize7(Test_UnPadToBlockSize5):
+    """Testcases for UnPadToBlockSize with blocksize=7."""
+
+    contents = "this is som\n sample text"
+    text_plain = ["Zhis is sample texty"]
+    text_padded = ["Zhis is sample textyZ"]
+    blocksize = 7
+
+
+class Test_UnPadToBlockSize16(Test_UnPadToBlockSize5):
+    """Testcases for UnPadToBlockSize with blocksize=16."""
+
+    contents = "This is Zome Zample TeZTZ"
+    text_plain = ["short"]
+    text_padded = ["shortZXXXXXXXXXX"]
+    blocksize = 16
+
+
 #############
 
 
-class Decrypt(FileWrapper):
+class Decrypt(FixedBlockSize):
     """Class for reading and writing to an encrypted file.
     
     This class accesses an encrypted file using a ciphering object
@@ -707,9 +796,9 @@ class Decrypt(FileWrapper):
     to the file and automatically encrypted.  Thus, Decrypt(fobj)
     can be seen as the decrypted version of the file-like object fobj.
     
-    Because this class is implemented on top of FixedBlockSize,
-    the plaintext may be padded with null characters to reach a multiple
-    of the block size.  If this is not desired, wrap it in PadToBlockSize.
+    Because this class is implemented on top of FixedBlockSize, it
+    assumes that the file size is a multiple of the block size.  If this
+    is not appropriate, wrap it with UnPadToBlockSize.
     
     There is a dual class, Encrypt, where all reads are encrypted
     and all writes are decrypted.  This would be used, for example, to
@@ -724,22 +813,28 @@ class Decrypt(FileWrapper):
         is the cipher object to be used.  Other arguments are passed through
         to FileWrapper.__init__
         """
-        self._cipher = cipher
-        myFileObj = Translate(fileobj,mode=mode,
-                                      rfunc=cipher.decrypt,
-                                      wfunc=cipher.encrypt)
-        myFileObj = FixedBlockSize(myFileObj,cipher.block_size)
-        FileWrapper.__init__(self,myFileObj)
+        self.setCipher(cipher)
+        myFileObj = Translate(fileobj,mode=mode,bytewise=True,
+                                      rfunc=self._rfunc,
+                                      wfunc=self._wfunc)
+        super(Decrypt,self).__init__(myFileObj,self.blocksize,mode=mode)
         
     def setCipher(self,cipher):
         """Change the cipher after object initialization."""
         self._cipher = cipher
-        self._rfunc = cipher.decrypt
-        self._wfunc = cipher.encrypt
+        self.blocksize = cipher.block_size
+
+    def _rfunc(self,data):
+        return self._cipher.decrypt(data)
+
+    def _wfunc(self,data):
+        return self._cipher.encrypt(data)
+
 
 _deprecate("DecryptFile",Decrypt)
 
-class Encrypt(FileWrapper):
+
+class Encrypt(FixedBlockSize):
     """Class for reading and writing to an decrypted file.
     
     This class accesses a decrypted file using a ciphering object
@@ -748,9 +843,10 @@ class Encrypt(FileWrapper):
     to the file are automatically decrypted.  Thus, Encrypt(fobj)
     can be seen as the encrypted version of the file-like object fobj.
 
-    Because this class is implemented on top of FixedBlockSize,
-    the plaintext may be padded with null characters to reach a multiple
-    of the block size.  If this is not desired, wrap it in PadToBlockSize.
+    Because this class is implemented on top of FixedBlockSize, it
+    assumes that the file size is a multiple of the block size.  If this
+    is not appropriate, wrap the underlying file object with PadToBlockSize.
+    You will need to write the padding data yourself.
     
     There is a dual class, Decrypt, where all reads are decrypted
     and all writes are encrypted.  This would be used, for example, to
@@ -760,86 +856,69 @@ class Encrypt(FileWrapper):
 
     def __init__(self,fileobj,cipher,mode=None):
         """Encrypt Constructor.
-        <fileobj> is the file object with decrypted contents, and <cipher>
+
+        'fileobj' is the file object with decrypted contents, and 'cipher'
         is the cipher object to be used.  Other arguments are passed through
         to FileWrapper.__init__
         """
-        self.__cipher = cipher
-        myFileObj = Translate(fileobj,mode=mode,
-                                      rfunc=self.__encrypt,
-                                      wfunc=cipher.decrypt)
-        myFileObj = FixedBlockSize(myFileObj,cipher.block_size)
-        FileWrapper.__init__(self,myFileObj)
+        self.setCipher(cipher)
+        myFileObj = Translate(fileobj,mode=mode,bytewise=True,
+                                      rfunc=self._rfunc,
+                                      wfunc=self._wfunc)
+        super(Encrypt,self).__init__(myFileObj,self.blocksize,mode=mode)
 
     def setCipher(self,cipher):
         """Change the cipher after object initialization."""
-        self.__cipher = cipher
-        self._wfunc = cipher.decrypt
-    
-    def __encrypt(self,data):
-        """Encrypt the given data.
-        This function pads any data given that is not a multiple of
-        the cipher's blocksize.  Such a case would indicate that it
-        is the last data to be read.
-        """
-        if len(data) % self.__cipher.block_size != 0:
-            data = self._fileobj._pad_to_size(data)
-        return self.__cipher.encrypt(data)
+        self._cipher = cipher
+        self.blocksize = cipher.block_size
+
+    def _rfunc(self,data):
+        return self._cipher.encrypt(data)
+
+    def _wfunc(self,data):
+        return self._cipher.decrypt(data)
+
 
 _deprecate("EncryptFile",Encrypt)
 
 
-class Test_CryptFiles(unittest.TestCase):
-    """Testcases for the (En/De)Crypt classes."""
+class Test_Encrypt(filelike.Test_ReadWriteSeek):
+    """Testcases for the Encrypt wrapper class"""
     
+    contents = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
+    plaintext = "Guido van Rossum is a space alien." + "\0"*6
+
+    def makeFile(self,contents,mode):
+        if len(contents) % self.cipher.block_size != 0:
+            raise ValueError("content must be multiple of blocksize.")
+        f = Encrypt(StringIO(self.cipher.decrypt(contents)),self.cipher,mode=mode)
+        return f
+        
     def setUp(self):
         from Crypto.Cipher import DES
         # Example inspired by the PyCrypto manual
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
-        self.plaintextin = "Guido van Rossum is a space alien."
-        self.plaintextout = "Guido van Rossum is a space alien." + "\0"*6
-        self.ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
-        self.plainfile = StringIO(self.plaintextin)
-        self.cryptfile = StringIO(self.ciphertext)
-        self.outfile = StringIO()
+        super(Test_Encrypt,self).setUp()
 
-    def tearDown(self):
-        pass
 
-    def test_ReadDecrypt(self):
-        """Test reading from an encrypted file."""
-        df = Decrypt(self.cryptfile,self.cipher,"r")
-        self.assert_(df.read() == self.plaintextout)
-
-    def test_Read1Decrypt(self):
-        """Test reading one byte from an encrypted file."""
-        df = Decrypt(self.cryptfile,self.cipher,"r")
-        self.assertEquals(df.read(1),self.plaintextout[0])
-        self.assertEquals(df.read(1),self.plaintextout[1])
-
-    def test_ReadEncrypt(self):
-        """Test reading from a decrypted file."""
-        ef = Encrypt(self.plainfile,self.cipher,"r")
-        self.assert_(ef.read() == self.ciphertext)
-
-    def test_Read1Encrypt(self):
-        """Test reading one bytes from a decrypted file."""
-        ef = Encrypt(self.plainfile,self.cipher,"r")
-        self.assertEquals(ef.read(1),self.ciphertext[0])
-        self.assertEquals(ef.read(1),self.ciphertext[1])
+class Test_Decrypt(filelike.Test_ReadWriteSeek):
+    """Testcases for the Decrypt wrapper class"""
     
-    def test_WriteDecrypt(self):
-        """Test writing to an encrypted file."""
-        df = Decrypt(self.outfile,self.cipher,"w")
-        df.write(self.plaintextin)
-        df.flush()
-        self.assert_(self.outfile.getvalue() == self.ciphertext)
+    ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
+    contents = "Guido van Rossum is a space alien." + "\0"*6
+
+    def makeFile(self,contents,mode):
+        if len(contents) % self.cipher.block_size != 0:
+            raise ValueError("content must be multiple of blocksize.")
+        f = Decrypt(StringIO(self.cipher.encrypt(contents)),self.cipher,mode=mode)
+        return f
         
-    def test_WriteEncrypt(self):
-        """Test writing to a decrypted file."""
-        ef = Encrypt(self.outfile,self.cipher,"w")
-        ef.write(self.ciphertext)
-        self.assert_(self.outfile.getvalue() == self.plaintextout)
+    def setUp(self):
+        from Crypto.Cipher import DES
+        # Example inspired by the PyCrypto manual
+        self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
+        super(Test_Decrypt,self).setUp()
+
 
 
 class Head(FileWrapper):
@@ -860,7 +939,7 @@ class Head(FileWrapper):
         will terminate when one of the given values has been exceeded.
         Any extraneous data is simply discarded.
         """
-        FileWrapper.__init__(self,fileobj,mode)
+        super(Head,self).__init__(fileobj,mode)
         self._maxBytes = bytes
         self._maxLines = lines
         self._bytesR = 0
@@ -1152,15 +1231,6 @@ except ImportError:
     pass
 
 
-## Conditionally provide gzip compression support
-# TODO: understand zlib, implement own version similar to bz2 support
-try:
-    import gzip
-    Gzip = gzip.GzipFile
-except ImportError:
-    pass
-
-
 class Test_OpenerDecoders(unittest.TestCase):
     """Testcases for the filelike.Opener decoder functions."""
     
@@ -1233,9 +1303,14 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize5))
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize7))
     suite.addTest(unittest.makeSuite(Test_FixedBlockSize24))
-    suite.addTest(unittest.makeSuite(Test_PadToBlockSize_5))
-    suite.addTest(unittest.makeSuite(Test_PadToBlockSize_7))
-#    suite.addTest(unittest.makeSuite(Test_CryptFiles))
+    suite.addTest(unittest.makeSuite(Test_PadToBlockSize5))
+    suite.addTest(unittest.makeSuite(Test_PadToBlockSize7))
+    suite.addTest(unittest.makeSuite(Test_PadToBlockSize16))
+    suite.addTest(unittest.makeSuite(Test_UnPadToBlockSize5))
+    suite.addTest(unittest.makeSuite(Test_UnPadToBlockSize7))
+    suite.addTest(unittest.makeSuite(Test_UnPadToBlockSize16))
+    suite.addTest(unittest.makeSuite(Test_Encrypt))
+    suite.addTest(unittest.makeSuite(Test_Decrypt))
 #    suite.addTest(unittest.makeSuite(Test_Head))
 #    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
 #    try:

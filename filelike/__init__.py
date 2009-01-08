@@ -177,7 +177,7 @@ class FileLikeBase(object):
         """Flush internal write buffer, if necessary."""
         if self.closed:
             raise IOError("File has been closed")
-        if self._check_mode("w") and self._wbuffer:
+        if self._check_mode("w") and self._wbuffer is not None:
             buffered = ""
             if self._sbuffer:
                 buffered = buffered + self._sbuffer
@@ -327,7 +327,7 @@ class FileLikeBase(object):
         return output
         
     def readline(self,size=-1):
-        """Read a line from the file, or a most <size> bytes."""
+        """Read a line from the file, or at most <size> bytes."""
         bits = []
         indx = -1
         sizeSoFar = 0
@@ -779,11 +779,11 @@ class Test_Read(unittest.TestCase):
         self.assertEquals(c,self.contents.split("\n")[0]+extra)
 
     def test_readlines(self):
-        cs = [ln.strip() for ln in self.file.readlines()]
+        cs = [ln.strip("\n") for ln in self.file.readlines()]
         self.assertEquals(cs,self.contents.split("\n"))
 
     def test_xreadlines(self):
-        cs = [ln.strip() for ln in self.file.xreadlines()]
+        cs = [ln.strip("\n") for ln in self.file.xreadlines()]
         self.assertEquals(cs,self.contents.split("\n"))
 
     def test_read_empty_file(self):
@@ -883,12 +883,11 @@ class Test_Join(Test_ReadWriteSeek):
         return join(files)
 
 
-def testfile(contents):
-    files = []
-    files.append(StringIO(contents[0:5]))
-    files.append(StringIO(contents[5:8]))
-    files.append(StringIO(contents[8:]))
-    return join(files)
+def testfile():
+    txt = "This is Zome Zample TeZTZ"
+    f = wrappers.UnPadToBlockSize(StringIO(""),16)
+    f._fileobj = StringIO(txt + f._padding(txt))
+    return f
 
 
 # Included here to avoid circular includes
@@ -901,8 +900,8 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_Join))
     from filelike import wrappers
     suite.addTest(wrappers.testsuite())
-    from filelike import pipeline
-    suite.addTest(pipeline.testsuite())
+#    from filelike import pipeline
+#    suite.addTest(pipeline.testsuite())
     return suite
 
 
