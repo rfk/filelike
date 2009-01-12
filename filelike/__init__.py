@@ -31,6 +31,19 @@ interface on top of primitive _read(), _write(), _seek() and _tell() methods.
 Subclasses may implement any or all of these methods to obtain the related
 higher-level file behaviors.
 
+It also provides some nifty file-handling functions:
+
+    * open:    mirrors the standard open() function but is much cleverer;
+               URLs are automatically fetched, .bz2 files are transparently
+               decompressed, and so-on.
+
+    * join:    concatenate multiple file-like objects together so that they
+               act like a single file.
+
+    * slice:   access a section of a file-like object as if it were an
+               independent file.
+
+
 The "wrappers" subpackage contains a collection of useful classes built on
 top of this framework.  These include:
     
@@ -67,21 +80,7 @@ first five lines of an encrypted file:
     f = file("some_encrypted_file.bin") > Decrypt(cipher) | Head(lines=5)
 
 
-Finally, we have some useful file-handling functions provided under the
-top-level filelike module:
-
-    * open:    mirrors that standard open() function but is much cleverer;
-               URLs are automatically fetched, .bz2 files are transparently
-               decompressed, and so-on.
-
-    * join:    concatenate multiple file-like objects together so that they
-               act like a single file.
-
-    * slice:   access a section of a file-like object as if it were an
-               independent file.
-
-
-Two utility functions are also provided for when code expects to deal with
+Finally, two utility functions are provided for when code expects to deal with
 file-like objects:
     
     * is_filelike(obj):   checks that an object is file-like
