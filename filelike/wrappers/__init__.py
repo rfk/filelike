@@ -153,10 +153,12 @@ from filelike.wrappers.crypto import Encrypt, Decrypt
 _deprecate("DecryptFile",Decrypt)
 _deprecate("EncryptFile",Encrypt)
 
-from filelike.wrappers.compress import BZip2, UnBZip2
-_deprecate("BZ2File",UnBZip2)
+#from filelike.wrappers.compress import BZip2, UnBZip2
+#_deprecate("BZ2File",UnBZip2)
 
 from filelike.wrappers.unix import Head
+
+from filelike.wrappers.slice import Slice
 
 
 ##  test cases
@@ -188,10 +190,10 @@ class Test_OpenerDecoders(unittest.TestCase):
         self.assertEquals(f.name,self.tfilename)
         self.assertEquals(f.read(),"contents")
     
-    def test_RemoteBzFile(self):
-        """Test opening a remote BZ2 file."""
-        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2")
-        self.assertEquals(f.read(),"content goes here if you please.\n")
+#    def test_RemoteBzFile(self):
+#        """Test opening a remote BZ2 file."""
+#        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2")
+#        self.assertEquals(f.read(),"content goes here if you please.\n")
 
 
 def testsuite():
@@ -206,9 +208,11 @@ def testsuite():
     suite.addTest(padtoblocksize.testsuite())
     from filelike.wrappers import crypto
     suite.addTest(crypto.testsuite())
-    from filelike.wrappers import compress
+#    from filelike.wrappers import compress
 #    suite.addTest(compress.testsuite())
     from filelike.wrappers import unix
     suite.addTest(unix.testsuite())
+    from filelike.wrappers import slice
+    suite.addTest(slice.testsuite())
     return suite
 

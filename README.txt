@@ -58,7 +58,11 @@ top-level filelike module:
     * join:    concatenate multiple file-like objects together so that they
                act like a single file.
 
-Two utility functions are provided for when code expects to deal with
+    * slice:   access a section of a file-like object as if it were an
+               independent file.
+
+
+Two utility functions are also provided for when code expects to deal with
 file-like objects:
     
     * is_filelike(obj):   checks that an object is file-like

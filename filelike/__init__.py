@@ -77,7 +77,11 @@ top-level filelike module:
     * join:    concatenate multiple file-like objects together so that they
                act like a single file.
 
-Two utility functions are provided for when code expects to deal with
+    * slice:   access a section of a file-like object as if it were an
+               independent file.
+
+
+Two utility functions are also provided for when code expects to deal with
 file-like objects:
     
     * is_filelike(obj):   checks that an object is file-like
@@ -157,8 +161,10 @@ class FileLikeBase(object):
         True is returned.
         """
         if hasattr(self,"mode"):
+            if "+" in self.mode:
+                return True
             if mode == "r":
-                if "r" not in self.mode and "+" not in self.mode:
+                if "r" not in self.mode:
                     return False    
             if mode == "w":
                 if "w" not in self.mode and "a" not in self.mode:
@@ -173,8 +179,10 @@ class FileLikeBase(object):
         permit access in that mode.
         """
         if hasattr(self,"mode"):
+            if "+" in self.mode:
+                return True
             if mode == "r":
-                if "r" not in self.mode and "+" not in self.mode:
+                if "r" not in self.mode:
                     raise IOError("File not opened for reading")
             if mode == "w":
                 if "w" not in self.mode and "a" not in self.mode:
@@ -265,7 +273,7 @@ class FileLikeBase(object):
 
     def tell(self):
         """Determine current position of internal file pointer."""
-        # Need to adjust for unread data in buffers
+        # Need to adjust for unread/unwritten data in buffers
         pos = self._tell()
         if self._rbuffer:
             pos = pos - len(self._rbuffer)
@@ -595,7 +603,8 @@ class join(FileLikeBase):
     """Class concatenating several file-like objects into a single file.
 
     This class is similar in spirit to the unix `cat` command, except that
-    it produces a file-like object that is readable, writable and seekable.
+    it produces a file-like object that is readable, writable and seekable
+    (so long as the underlying files permit those operations, of course).
 
     When reading, data is read from each file in turn until it has been
     exhausted.  Seeks and tells are calculated using the individual positions
@@ -620,6 +629,8 @@ class join(FileLikeBase):
             self.mode = mode
         self._files = list(files)
         self._curFile = 0
+        if mode and "a" in mode:
+            self.seek(0,2)
 
     def close(self):
         super(join,self).close()
@@ -708,7 +719,16 @@ class join(FileLikeBase):
 
     def _tell(self):
         return sum([f.tell() for f in self._files[:self._curFile+1]])
-    
+ 
+
+def slice(f,start=0,stop=None,mode=None,resizable=False):
+    """Manipulate a portion of a file-like object.
+
+    This function simple exposes the class filelike.wrappers.Slice
+    at the top-level of the module, since it has a nice symmetry
+    with the 'join' operation.
+    """
+    return filelike.wrappers.Slice(f,start,stop,mode,resizable)
 
 
 def to_filelike(obj,mode="rw"):
@@ -807,7 +827,7 @@ class Test_ReadWrite(Test_Read):
     """Generic file-like testcases for writable files."""
 
     def setUp(self):
-        self.file = self.makeFile(self.contents,"a+")
+        self.file = self.makeFile(self.contents,"r+")
 
     def test_write_read(self):
         self.file.write("hello")
@@ -896,9 +916,14 @@ class Test_Docs(unittest.TestCase):
     def test_readme(self):
         """Check that README.txt is up-to-date."""
         import os
+        import difflib
         readme = os.path.join(os.path.dirname(__file__),"..","README.txt")
         if os.path.exists(readme):
-            self.assertEquals(open(readme).read(),__doc__)
+            diff = difflib.unified_diff(open(readme).readlines(),__doc__.splitlines(True))
+            diff = "".join(diff)
+            if diff:
+                print diff
+                raise RuntimeError
 
 
 # Included here to avoid circular includes
@@ -909,13 +934,12 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_StringIO))
     suite.addTest(unittest.makeSuite(Test_TempFile))
     suite.addTest(unittest.makeSuite(Test_Join))
-    suite.addTest(unittest.makeSuite(Test_Docs))
     from filelike import wrappers
     suite.addTest(wrappers.testsuite())
     from filelike import pipeline
     suite.addTest(pipeline.testsuite())
+    suite.addTest(unittest.makeSuite(Test_Docs))
     return suite
-
 
 # Run regression tests when called from comand-line
 if __name__ == "__main__":
