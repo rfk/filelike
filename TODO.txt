@@ -1,0 +1,5 @@
+
+Tee - copy to another file, good for wrapping streams
+"-" file  more, for when you don't need seek
+compression wrappers
+
