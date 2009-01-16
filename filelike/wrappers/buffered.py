@@ -22,9 +22,10 @@
     filelike.wrappers.buffered:  buffering of streams to create a file
     
 This module provides the filelike wrapper 'Buffered', which routes reads
-and writes through a separate buffer file to allow for seeking etc.  It
-can be used to transform a one-shot read/write stream into a proper
-file-like object.
+and writes through a separate buffer file.  This allows the full file-like
+interface to be provided, including seek() and tell(), while guaranteeing
+that the underlying file is treated like a stream, with only read() and
+write() being called.
 
 """ 
 
@@ -43,109 +44,98 @@ except ImportError:
 class Buffered(FileWrapper):
     """Class implementing buffereing of input and output streams.
     
-    This class uses a separate buffer file as an intermediary between
-    an input stream and an output stream.  As data is read from the
-    input stream it is duplicated to the buffere file, allowing it to
-    be seeked through without re-reading fro the stream.  When the
-    file is closed, the contents of the buffer are written to the output
-    stream.
+    This class uses a separate buffer file to hold the contents of the
+    underlying file while they are being manipulated.  As data is read
+    it is duplicated into the buffer, and data is written from the buffer
+    back to the file on close.
     """
     
-    def __init__(self,fileobj=None,mode=None,instream=None,outstream=None,onclose=None):
-        """Buffered file wrapper constructor.
-
-        Unlike most file-like wrappers, the wrapped file is allowed to
-        be None; in this case a fresh temporary file is be used.
-        'instream' is the stream from which data will be read, while
-        'outstream' is the stream to which data will be written.
-        """
-        if fileobj is None:
-            fileobj = TempFile()
+    def __init__(self,fileobj,mode=None):
+        """Buffered file wrapper constructor."""
         super(Buffered,self).__init__(fileobj,mode)
-        if hasattr(self,"mode"):
-            if "r" in mode or "+" in mode:
-                if instream is None:
-                    raise ValueError("Must specify an instream for readable files.")
-            if "w" in mode or "a" in mode or "+" in mode:
-                if outstream is None:
-                    raise ValueError("Must specify an outstream for writable files.")
+        self._buffer = TempFile()
         self._in_eof = False
         self._in_pos = 0
-        self._instream = instream
-        self._outstream = outstream
-        self.onclose = onclose
-        if "a" in self.mode:
+        if hasattr(self,"mode") and "a" in self.mode:
             self.seek(0,2)
+
+    def flush(self):
+        # a no-op, we only want to write to the file on close
+        pass
  
     def close(self):
         if self.closed:
             return
-        if self.onclose:
-            self.onclose()
-        if self._outstream:
-            self._fileobj.seek(0,0)
-            for ln in self._fileobj:
-                self._outstream.write(ln)
-            self._outstream.close()
-        if self._instream:
-            self._instream.close()
+        if self._check_mode("w"):
+            if self._check_mode("r"):
+                if not self._in_eof:
+                    self._read_rest()
+                self._fileobj.seek(0,0)
+            self._buffer.seek(0,0)
+            for ln in self._buffer:
+                self._fileobj.write(ln)
         super(Buffered,self).close()
 
     def _read(self,sizehint=-1):
         #  First return any data available from the buffer
-        data = self._fileobj.read(sizehint)
+        data = self._buffer.read(sizehint)
         if data != "":
             return data
-        # Then look for more data in the input stream
+        # Then look for more data in the underlying file
         if self._in_eof:
             return None
-        data = self._instream.read(sizehint)
+        data = self._fileobj.read(sizehint)
         if sizehint < 0 or len(data) < sizehint:
             self._in_eof = True
         self._in_pos += len(data)
-        self._fileobj.write(data)
+        self._buffer.write(data)
         return data
 
     def _write(self,data,flushing=False):
-        super(Buffered,self)._write(data,flushing)
-        if self._instream and not self._in_eof:
-            diff = self._fileobj.tell() - self._in_pos
+        self._buffer.write(data)
+        if self._check_mode("r") and not self._in_eof:
+            diff = self._buffer.tell() - self._in_pos
             if diff > 0:
-                junk = self._instream.read(diff)
+                junk = self._fileobj.read(diff)
                 self._in_pos += len(junk)
                 if len(junk) < diff:
                     self._in_eof = True
     
     def _seek(self,offset,whence):
-        # Ensure we've read enough to simply do the see on the buffer
-        if not self._in_eof:
+        # Ensure we've read enough to simply do the seek on the buffer
+        if self._check_mode("r") and not self._in_eof:
             if whence == 0:
                 if offset > self._in_pos:
                     self._read_rest()
             if whence == 1:
-                if self._fileobj.tell() + offset > self._in_pos:
+                if self._buffer.tell() + offset > self._in_pos:
                     self._read_rest()
             if whence == 2:
                 self._read_rest()
         # Then just do it on the buffer...
-        self._fileobj.seek(offset,whence)
+        self._buffer.seek(offset,whence)
+
+    def _tell(self):
+        return self._buffer.tell()
         
     def _read_rest(self):
         """Read the rest of the input stream."""
-        pos = self._fileobj.tell()
-        self._fileobj.seek(0,2)
-        for ln in self._instream:
-            self._in_pos += len(ln)
-            self._fileobj.write(ln)
+        pos = self._buffer.tell()
+        self._buffer.seek(0,2)
+        data = self._fileobj.read(self._bufsize)
+        while data:
+            self._in_pos += len(data)
+            self._buffer.write(data)
+            data = self._fileobj.read(self._bufsize)
         self._in_eof = True 
-        self._fileobj.seek(pos)
+        self._buffer.seek(pos)
 
 
 class Test_Buffered(filelike.Test_ReadWriteSeek):
     """Testcases for the Buffered class."""
     
     def makeFile(self,contents,mode):
-        return Buffered(None,mode=mode,instream=StringIO(contents),outstream=StringIO())
+        return Buffered(StringIO(contents),mode)
 
     
 def testsuite():

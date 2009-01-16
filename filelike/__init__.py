@@ -272,7 +272,8 @@ class FileLikeBase(object):
         if hasattr(self,"mode") and "-" in self.mode:
             raise IOError("File is not seekable.")
         # Ensure that there's nothing left in the write buffer
-        self.flush()
+        if self._wbuffer:
+            self.flush()
         # Adjust for any data left in the read buffer
         if whence == 1 and self._rbuffer:
             offset = offset - len(self._rbuffer)

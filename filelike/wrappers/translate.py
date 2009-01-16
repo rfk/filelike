@@ -44,22 +44,19 @@ class Translate(FileWrapper):
     
     The translating function must accept a string as its only argument,
     and return a transformed string representing the updated file contents.
-    If the transform needs to be flushed when reading/writing is finished, it
-    should provide a flush() method that returns either None, or any data
-    remaining to be read/written.
     
-    The default use case assumes either reading+writing with a stateless
+    The default use case assumes either reading+writing with a symmetric
     translation function, or exclusive reading or writing.  So, a single
     function is used for translation on both reads and writes.  Separate
     reading and writing translation functions may be provided using keyword
     arguments 'rfunc' and 'wfunc' to the constructor.
 
-    Note that it must be possible to flush the translation function 
-    multiple times, and at any time.  If you're using a function that
-    expects to be flushed only at the end of the data stream, consider
-    using one of 'ReadStreamTranslate' and 'WriteStreamTranslate' instead.
+    If the transform needs to be flushed when reading/writing is finished, it
+    should provide a flush() method that returns either None, or any data
+    remaining to be read/written.  If it needs to be reset after flushing,
+    it should provide a reset() method.
 
-    If the translaton function operates on a byte-per-byte basis and
+    If the translaton function operates on a byte-by-byte basis and
     does not buffer any data, consider using the 'BytewiseTranslate'
     class instead; the efficiency of several operations can be improved
     dramatically given such properties of the translation function.
@@ -70,13 +67,9 @@ class Translate(FileWrapper):
 
         'fileobj' must be the file-like object whose contents are to be
         transformed, and 'func' the callable that will transform the
-        contents.  'mode' should be one of "r" or "w" to indicate whether
-        reading or writing is desired.  If omitted it is determined from
-        'fileobj' where possible, otherwise it defaults to "r".
-        
-        If separate reading/writing translations are required, the
-        keyword arguments 'rfunc' and 'wfunc' can be used in place of
-        'func'.
+        file's contents.  If separate reading/writing translations are
+        required, the keyword arguments 'rfunc' and 'wfunc' can be used 
+        in place of 'func'.
         """
         super(Translate,self).__init__(fileobj,mode)
         if func is not None:
@@ -97,11 +90,10 @@ class Translate(FileWrapper):
             self._rfunc = rfunc
             self._wfunc = wfunc
         self._pos = 0
-        self._flushed_rfunc = False
+        self._read_eof = False
             
     def _flush_rfunc(self):
         """Call flush on the reading translation function, if necessary."""
-        self._flushed_rfunc = True
         if hasattr(self._rfunc,"flush"):
             return self._rfunc.flush()
         return None
@@ -117,13 +109,15 @@ class Translate(FileWrapper):
         if data is not None:
             self._fileobj.write(data)
         super(Translate,self).flush()
+        if hasattr(self._wfunc,"reset"):
+            self.seek(self.tell(),0)
 
     def _read(self,sizehint=-1):
-        """Read approximately <sizehint> bytes from the file."""
+        if self._read_eof:
+            return None
         data = self._fileobj.read(sizehint)
         if data == "":
-            if self._flushed_rfunc:
-                return None
+            self._read_eof = True
             tData = self._flush_rfunc()
             if not tData:
                 return None
@@ -141,14 +135,18 @@ class Translate(FileWrapper):
         return self._pos
 
     def _seek(self,offset,whence):
-        #  For generic translation functions, can't do much more than
+        #  For generic translation functions, we can't do much more than
         #  go back to the beginning.  See BytewiseTranslate for a much
         #  more efficient seek().
         if whence > 0 or offset > 0:
             raise NotImplementedError
         self._fileobj.seek(0,0)
         self._pos = 0
-        self._flushed_rfunc = False
+        self._read_eof = False
+        if hasattr(self._rfunc,"reset"):
+            self._rfunc.reset()
+        if hasattr(self._wfunc,"reset"):
+            self._wfunc.reset()
 
 
 class Test_Translate(filelike.Test_ReadWriteSeek):
@@ -234,96 +232,10 @@ class Test_BytewiseTranslate(filelike.Test_ReadWriteSeek):
         return BytewiseTranslate(StringIO(contents.encode("rot13")),rot13,mode=mode)
 
 
-class ReadStreamTranslate(FileWrapper):
-    """Class implementing a streaming read translation on a file's contents.
-    
-    This class wraps a file-like object in another file-like object,
-    applying a given function to translate the file's contents as it is
-    read.  It could be used, for example, to decompress a file on the fly.
-    
-    This class is designed for working with streaming translation functions,
-    which buffer data internally and must be flushed exactly once, at stream
-    termination.  It supports (emulated) seeking but cannot be written to.
-
-    The constructor expects the argument 'func_factory' which will be called
-    to create the translation function.
-    """
-
-    def __init__(self,fileobj,func_factory,mode=None):
-        self._func_factory = func_factory
-        self._eof = False
-        f = Translate(fileobj,rfunc=func_factory(),mode="r")
-        super(ReadStreamTranslate,self).__init__(f,mode="r")
-
-    def _seek(self,offset,whence):
-        if whence > 0 or offset > 0:
-            raise NotImplementedError
-        self._fileobj.seek(0,0)
-        self._fileobj._rfunc = self._func_factory()
-
-    def _write(self,data,flushing=False):
-        raise IOError("File not writable.")
-
-
-class Test_ReadStreamTranslate(filelike.Test_ReadWriteSeek):
-    """Testcases for the ReadStreamTranslate class."""
-    
-    def makeFile(self,contents,mode):
-        def rot13_factory():
-            def rot13(string):
-                return string.encode("rot13")
-            return rot13
-        return ReadStreamTranslate(StringIO(contents.encode("rot13")),rot13_factory,mode=mode)
-
-    def test_write_read(self):
-        pass
-    def test_read_write_read(self):
-        pass
-    def test_read_write_seek(self):
-        pass
-
-
-class WriteStreamTranslate(FileWrapper):
-    """Class implementing a streaming write translation on a file's contents.
-    
-    This class wraps a file-like object in another file-like object,
-    applying a given function to translate the file's contents as it is
-    written.  It could be used, for example, to compress a file on the fly.
-    
-    This class is designed for working with streaming translation functions,
-    which buffer data internally and must be flushed exactly once, at stream
-    termination.  It cannot be read from or seeked.
-
-    The constructor expects the argument 'func_factory' which will be called
-    to create the translation function.
-    """
-
-    def __init__(self,fileobj,func_factory,mode=None):
-        self._func_factory = func_factory
-        self._closing = False
-        f = Translate(fileobj,wfunc=func_factory(),mode="w")
-        super(WriteStreamTranslate,self).__init__(f,mode="w")
-
-    def _write(self,data,flushing=True):
-        if not self.closing:
-            flushing = False
-        super(WriteStreamTemplate,self)._write(data,flushing)
-
-    def close(self):
-        self._closing = True
-        super(WriteStreamTemplate,self).close()
-
-    def _read(self,sizehint=-1):
-        raise IOError("File not readable.")
-
-    def _seek(self,offset,whence):
-        raise IOError("File not seekable.")
-
 
 def testsuite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(Test_Translate))
     suite.addTest(unittest.makeSuite(Test_BytewiseTranslate))
-    suite.addTest(unittest.makeSuite(Test_ReadStreamTranslate))
     return suite
 

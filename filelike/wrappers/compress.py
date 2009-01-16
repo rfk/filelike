@@ -30,8 +30,6 @@ each building other compression wrappers.
 import filelike
 from filelike.wrappers import FileWrapper
 from filelike.wrappers.translate import Translate
-from filelike.wrappers.translate import ReadStreamTranslate
-from filelike.wrappers.translate import WriteStreamTranslate
 from filelike.wrappers.buffered import Buffered
 
 import unittest
@@ -46,8 +44,7 @@ class Decompress(FileWrapper):
     all data read from the file is decompressed on demand, and all data
     written to the file is compressed.
 
-    Subclases must provide compressor_factory() and decompressor_factory()
-    methods.
+    Subclases must provide compress() and decompress() methods.
     """
 
     def __init__(self,fileobj,mode=None):
@@ -55,28 +52,21 @@ class Decompress(FileWrapper):
             try:
                 mode = fileobj.mode
             except AtributeError:
-                mode = "r"
+                mode = "r+"
         myFileObj = None
         if "r" in mode:
             if "w" not in mode and "a" not in mode and "+" not in mode:
                 # Nice and easy, just a streaming decompress on read
-                myFileObj = ReadStreamTranslate(fileobj,mode=mode,
-                                    func_factory=self.decompressor_factory)
+                myFileObj = Translate(fileobj,mode=mode,func=self.decompress)
         else:
             if "-" in mode:
                 # Nice and easy, just a streaming compress on write
-                myFileObj = WriteStreamTranslate(fileobj,mode=mode,
-                                    func_factory=self.compressor_factory)
+                myFileObj = Translate(fileobj,mode=mode,func=self.compress)
         if not myFileObj:
             # Rats, writing + seekabilty == inefficient.
-            # Operate using a buffer file.
-            ins = Translate(fileobj,mode="r",rfunc=self.decompressor_factory())
-            out = Translate(fileobj,mode="w",wfunc=self.compressor_factory())
-            def onclose():
-                ins._fileobj = None
-                fileobj.seek(0,0)
-            myFileObj = Buffered(fileobj=None,mode=mode,instream=ins,
-                                 outstream=out,onclose=onclose)
+            # Operating in a buffer is the only sensible option
+            myFileObj = Translate(fileobj,mode=mode,rfunc=self.decompress,wfunc=self.compress)
+            myFileObj = Buffered(myFileObj,mode=mode)
         super(Decompress,self).__init__(myFileObj,mode=mode)
 
 
@@ -87,8 +77,7 @@ class Compress(FileWrapper):
     all data read from the file is compressed on demand, and all data
     written to the file is decompressed.
 
-    Subclases must provide compressor_factory() and decompressor_factory()
-    methods.
+    Subclases must provide compress() and decompress() methods.
     """
 
     def __init__(self,fileobj,mode=None):
@@ -96,26 +85,21 @@ class Compress(FileWrapper):
             try:
                 mode = fileobj.mode
             except AtributeError:
-                mode = "r"
+                mode = "r+"
         myFileObj = None
         if "r" in mode:
             if "w" not in mode and "a" not in mode and "+" not in mode:
                 # Nice and easy, just a streaming compress on read
-                myFileObj = ReadStreamTranslate(fileobj,mode=mode,
-                                    func_factory=self.compressor_factory)
+                myFileObj = Translate(fileobj,mode=mode,func=self.compress)
         else:
             if "-" in mode:
                 # Nice and easy, just a streaming decompress on write
-                myFileObj = WriteStreamTranslate(fileobj,mode=mode,
-                                    func_factory=self.decompressor_factory)
+                myFileObj = Translate(fileobj,mode=mode,func=self.decompress)
         if not myFileObj:
             # Rats, writing + seekabilty == inefficient
-            ins = Translate(fileobj,mode="r",rfunc=self.compressor_factory())
-            out = Translate(fileobj,mode="w",wfunc=self.decompressor_factory())
-            def onclose():
-                ins._fileobj = None
-                fileobj.seek(0,0)
-            myFileObj = Buffered(mode=mode,instream=ins,outstream=out,onclose=onclose)
+            # Operating in a buffer is the only sensible option
+            myFileObj = Translate(fileobj,mode=mode,rfunc=self.compress,wfunc=self.decompress)
+            myFileObj = Buffered(myFileObj,mode=mode)
         super(Compress,self).__init__(myFileObj,mode=mode)
 
 
@@ -125,22 +109,29 @@ class BZip2Mixin(object):
     def __init__(self,*args,**kwds):
         if not hasattr(self,"compresslevel"):
             self.compresslevel = 9
-        super(BZip2Mixin,self).__init__(*args,**kwds)
-
-    def compressor_factory(self):
-        c = bz2.BZ2Compressor(self.compresslevel)
+        # Compression function with flush and reset.
+        c = [bz2.BZ2Compressor()]
         def compress(data):
-            return c.compress(data)
-        compress.flush = c.flush
-        return compress
-
-    def decompressor_factory(self):
-        d = bz2.BZ2Decompressor()
+            return c[0].compress(data)
+        def c_flush():
+            return c[0].flush()
+        def c_reset():
+            c[0] = bz2.BZ2Compressor()
+        compress.flush = c_flush
+        compress.reset = c_reset
+        self.compress = compress
+        # Decompression funtion with reset
+        d = [bz2.BZ2Decompressor()]
         def decompress(data):
             if data == "":
                 return ""
-            return d.decompress(data)
-        return decompress
+            return d[0].decompress(data)
+        def d_reset():
+            d[0] = bz2.BZ2Decompressor()
+        decompress.reset = d_reset
+        self.decompress = decompress
+        # These can now be used by superclass constructors
+        super(BZip2Mixin,self).__init__(*args,**kwds)
 
 
 class UnBZip2(BZip2Mixin,Decompress):

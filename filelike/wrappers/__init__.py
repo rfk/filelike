@@ -140,8 +140,6 @@ class FileWrapper(FileLikeBase):
 
 from filelike.wrappers.translate import Translate, BytewiseTranslate
 _deprecate("TransFile",Translate)
-from filelike.wrappers.translate import ReadStreamTranslate
-from filelike.wrappers.translate import WriteStreamTranslate
 
 from filelike.wrappers.fixedblocksize import FixedBlockSize
 _deprecate("FixedBlockSizeFile",FixedBlockSize)
