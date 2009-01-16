@@ -210,6 +210,24 @@ class Test_BZip2(filelike.Test_ReadWriteSeek):
         self.assertEquals(f.read(),bz2.compress(""))
         f.close()
 
+    def test_resulting_file(self):
+        """Make sure BZip2 changes are pushed through to actual file."""
+        import tempfile
+        import os
+        (_,fn) = tempfile.mkstemp()
+        try:
+            f = open(fn,"w")
+            f.write("hello world!")
+            f.close()
+            f = BZip2(open(fn,"r+"))
+            f.read(6)
+            f.seek(-6,1)
+            f.write(bz2.compress("hello Australia!"))
+            f.close()
+            self.assertEquals(open(fn).read(),"hello Australia!")
+        finally:
+          os.unlink(fn)
+
 
 class Test_UnBZip2(filelike.Test_ReadWriteSeek):
     """Tetcases for UnBZip2 wrapper class."""
@@ -218,6 +236,25 @@ class Test_UnBZip2(filelike.Test_ReadWriteSeek):
 
     def makeFile(self,contents,mode):
         return UnBZip2(StringIO(bz2.compress(contents)),mode)
+
+    def test_resulting_file(self):
+        """Make sure UnBZip2 changes are pushed through to actual file."""
+        import tempfile
+        import os
+        (_,fn) = tempfile.mkstemp()
+        try:
+            f = open(fn,"w")
+            f.write(bz2.compress("hello world!"))
+            f.close()
+            f = UnBZip2(open(fn,"r+"))
+            f.read(6)
+            f.write("Ausralia!")
+            f.seek(-6,1)
+            f.write("tralia!")
+            f.close()
+            self.assertEquals(open(fn).read(),bz2.compress("hello Australia!"))
+        finally:
+          os.unlink(fn)
 
 
 def testsuite():
