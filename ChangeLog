@@ -4,6 +4,7 @@ Version 0.3.0
    * Added support for seek() and tell()
    * Added filelike.join() for concatenating several files
      into one file-like object
+   * Added filelike.slice() for accessing a portion of a file
    * Added support for context-manager protocol
    * Much better support for intermingled reads and writes
    * Restructured the 'wrappers' module to provide a consistent
@@ -20,7 +21,7 @@ Version 0.2.2
 
 Version 0.2.1
 
-   * Added filelike.open() functions, which tries to open files in
+   * Added filelike.open() function, which tries to open files in
      a smart manner (e.g. fetching URLs, transparent unzipping, etc)
 
 

@@ -1,6 +1,6 @@
 # filelike/wrappers/compress.py
 #
-# Copyright (C) 2006-2008, Ryan Kelly
+# Copyright (C) 2006-2009, Ryan Kelly
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -29,92 +29,118 @@ each building other compression wrappers.
 
 import filelike
 from filelike.wrappers import FileWrapper
+from filelike.wrappers.translate import Translate
 from filelike.wrappers.translate import ReadStreamTranslate
 from filelike.wrappers.translate import WriteStreamTranslate
+from filelike.wrappers.buffered import Buffered
 
 import unittest
 from StringIO import StringIO
 
 import bz2
 
-
-class CompressMixin(object):
-    """Abstract base mixin class for files managing (de)compression.
-
-    """
-
-    def __init__(self,*args,**kwds):
-        self._reset_compressor()
-        self._reset_decompressor()
-        super(CompressMixin,self).__init__(*args,**kwds)
-
-    def _reset_compressor(self):
-        self.__compressor = self._make_compressor()
-        def compress(data):
-            return self.__compressor.compress(data)
-        def c_flush():
-            try:
-                f = self.__compressor.flush
-            except AttributeError:
-                return ""
-            return f()
-        compress.flush = c_flush
-        self.compress = compress
-
-
-class ReadCompress(ReadStreamTranslate):
-    """Abstract base class for compressing files during reading.
-
-    Instances of this class represent the compressed version of a file;
-    all data read from the file is compressed on demand.
-    """
-
-    def __init__(self,fileobj,mode=None):
-        super(ReadCompress,self).__init__(fileobj,mode="r",
-                                          rfunc=self.compress_factory)
-
-class WriteCompress(WriteStreamTranslate):
-    """Abstract base class for compressing files during reading.
-
-    Instances of this class represent the compressed version of a file;
-    all data read from the file is compressed on demand.
-    """
-
-    def __init__(self,fileobj,mode=None):
-        super(ReadCompress,self).__init__(fileobj,mode="r",
-                                          rfunc=self.compress_factory)
-
-
-class Decompress(Translate):
+class Decompress(FileWrapper):
     """Abstract base class for decompressing files.
 
     Instances of this class represent the decompressed version of a file - 
     all data read from the file is decompressed on demand, and all data
     written to the file is compressed.
 
-    Subclasses need to provide the 'compress' and 'decompress' methods,
-    probably be done by combining with a subclass of CompressMixin.
+    Subclases must provide compressor_factory() and decompressor_factory()
+    methods.
     """
 
     def __init__(self,fileobj,mode=None):
-        super(Decompress,self).__init__(fileobj,mode=mode,
-                                       rfunc=self.decompress,
-                                       wfunc=self.compress)
+        if mode is None:
+            try:
+                mode = fileobj.mode
+            except AtributeError:
+                mode = "r"
+        myFileObj = None
+        if "r" in mode:
+            if "w" not in mode and "a" not in mode and "+" not in mode:
+                # Nice and easy, just a streaming decompress on read
+                myFileObj = ReadStreamTranslate(fileobj,mode=mode,
+                                    func_factory=self.decompressor_factory)
+        else:
+            if "-" in mode:
+                # Nice and easy, just a streaming compress on write
+                myFileObj = WriteStreamTranslate(fileobj,mode=mode,
+                                    func_factory=self.compressor_factory)
+        if not myFileObj:
+            # Rats, writing + seekabilty == inefficient.
+            # Operate using a buffer file.
+            ins = Translate(fileobj,mode="r",rfunc=self.decompressor_factory())
+            out = Translate(fileobj,mode="w",wfunc=self.compressor_factory())
+            def onclose():
+                ins._fileobj = None
+                fileobj.seek(0,0)
+            myFileObj = Buffered(fileobj=None,mode=mode,instream=ins,
+                                 outstream=out,onclose=onclose)
+        super(Decompress,self).__init__(myFileObj,mode=mode)
 
 
+class Compress(FileWrapper):
+    """Abstract base class for compressing files.
 
-class BZip2Mixin(CompressMixin):
-    """Mixin for Compress/UnCompress subclasses using Bzip2."""
+    Instances of this class represent the compressed version of a file - 
+    all data read from the file is compressed on demand, and all data
+    written to the file is decompressed.
+
+    Subclases must provide compressor_factory() and decompressor_factory()
+    methods.
+    """
+
+    def __init__(self,fileobj,mode=None):
+        if mode is None:
+            try:
+                mode = fileobj.mode
+            except AtributeError:
+                mode = "r"
+        myFileObj = None
+        if "r" in mode:
+            if "w" not in mode and "a" not in mode and "+" not in mode:
+                # Nice and easy, just a streaming compress on read
+                myFileObj = ReadStreamTranslate(fileobj,mode=mode,
+                                    func_factory=self.compressor_factory)
+        else:
+            if "-" in mode:
+                # Nice and easy, just a streaming decompress on write
+                myFileObj = WriteStreamTranslate(fileobj,mode=mode,
+                                    func_factory=self.decompressor_factory)
+        if not myFileObj:
+            # Rats, writing + seekabilty == inefficient
+            ins = Translate(fileobj,mode="r",rfunc=self.compressor_factory())
+            out = Translate(fileobj,mode="w",wfunc=self.decompressor_factory())
+            def onclose():
+                ins._fileobj = None
+                fileobj.seek(0,0)
+            myFileObj = Buffered(mode=mode,instream=ins,outstream=out,onclose=onclose)
+        super(Compress,self).__init__(myFileObj,mode=mode)
+
+
+class BZip2Mixin(object):
+    """Mixin for Compress/Decompress subclasses using Bzip2."""
 
     def __init__(self,*args,**kwds):
         if not hasattr(self,"compresslevel"):
             self.compresslevel = 9
+        super(BZip2Mixin,self).__init__(*args,**kwds)
 
-    def _make_compressor(self):
-        return bz2.BZ2Compressor(self.compresslevel)
+    def compressor_factory(self):
+        c = bz2.BZ2Compressor(self.compresslevel)
+        def compress(data):
+            return c.compress(data)
+        compress.flush = c.flush
+        return compress
 
-    def _make_decompressor(self):
-        return bz2.BZ2Decompressor()
+    def decompressor_factory(self):
+        d = bz2.BZ2Decompressor()
+        def decompress(data):
+            if data == "":
+                return ""
+            return d.decompress(data)
+        return decompress
 
 
 class UnBZip2(BZip2Mixin,Decompress):
@@ -128,7 +154,7 @@ class UnBZip2(BZip2Mixin,Decompress):
     
     def __init__(self,fileobj,mode=None,compresslevel=9):
         self.compresslevel = compresslevel
-        super(UnBZip2,self).__init__(fileobj,mode=None)
+        super(UnBZip2,self).__init__(fileobj,mode=mode)
 
 
 class BZip2(BZip2Mixin,Compress):
@@ -141,7 +167,7 @@ class BZip2(BZip2Mixin,Compress):
     
     def __init__(self,fileobj,mode=None,compresslevel=9):
         self.compresslevel = compresslevel
-        super(BZip2,self).__init__(fileobj,mode=None)
+        super(BZip2,self).__init__(fileobj,mode=mode)
 
 
 ##  Add handling of .bz2 files to filelike.open()
@@ -163,6 +189,33 @@ class Test_BZip2(filelike.Test_ReadWriteSeek):
     def makeFile(self,contents,mode):
         return BZip2(StringIO(bz2.decompress(contents)),mode)
 
+    #  We cant just write text into a BZip stream, so we have
+    #  to adjust these tests
+
+    def test_write_read(self):
+        self.file.write(self.contents[0:5])
+        c = self.file.read()
+        self.assertEquals(c,self.contents[5:])
+
+    def test_read_write_read(self):
+        c = self.file.read(5)
+        self.assertEquals(c,self.contents[:5])
+        self.file.write(self.contents[5:10])
+        c = self.file.read(5)
+        self.assertEquals(c,self.contents[10:15])
+
+    def test_read_write_seek(self):
+        c = self.file.read(5)
+        self.assertEquals(c,self.contents[:5])
+        self.file.write(self.contents[5:10])
+        self.file.seek(0)
+        c = self.file.read(10)
+        self.assertEquals(c,self.contents[:10])
+
+    def test_read_empty_file(self):
+        f = self.makeFile("","r")
+        self.assertEquals(f.read(),bz2.compress(""))
+
 
 class Test_UnBZip2(filelike.Test_ReadWriteSeek):
     """Tetcases for UnBZip2 wrapper class."""
@@ -170,7 +223,7 @@ class Test_UnBZip2(filelike.Test_ReadWriteSeek):
     contents = "This is my uncompressed\n test data"
 
     def makeFile(self,contents,mode):
-        return BZip2(StringIO(bz2.compress(contents)),mode)
+        return UnBZip2(StringIO(bz2.compress(contents)),mode)
 
 
 def testsuite():

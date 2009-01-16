@@ -1,6 +1,6 @@
 # filelike/wrappers/__init__.py
 #
-# Copyright (C) 2006-2008, Ryan Kelly
+# Copyright (C) 2006-2009, Ryan Kelly
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -141,7 +141,7 @@ class FileWrapper(FileLikeBase):
 from filelike.wrappers.translate import Translate, BytewiseTranslate
 _deprecate("TransFile",Translate)
 from filelike.wrappers.translate import ReadStreamTranslate
-#from filelike.wrappers.translate import WriteStreamTranslate
+from filelike.wrappers.translate import WriteStreamTranslate
 
 from filelike.wrappers.fixedblocksize import FixedBlockSize
 _deprecate("FixedBlockSizeFile",FixedBlockSize)
@@ -153,8 +153,10 @@ from filelike.wrappers.crypto import Encrypt, Decrypt
 _deprecate("DecryptFile",Decrypt)
 _deprecate("EncryptFile",Encrypt)
 
-#from filelike.wrappers.compress import BZip2, UnBZip2
-#_deprecate("BZ2File",UnBZip2)
+from filelike.wrappers.buffered import Buffered
+
+from filelike.wrappers.compress import BZip2, UnBZip2
+_deprecate("BZ2File",UnBZip2)
 
 from filelike.wrappers.unix import Head
 
@@ -190,10 +192,10 @@ class Test_OpenerDecoders(unittest.TestCase):
         self.assertEquals(f.name,self.tfilename)
         self.assertEquals(f.read(),"contents")
     
-#    def test_RemoteBzFile(self):
-#        """Test opening a remote BZ2 file."""
-#        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2")
-#        self.assertEquals(f.read(),"content goes here if you please.\n")
+    def test_RemoteBzFile(self):
+        """Test opening a remote BZ2 file."""
+        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2")
+        self.assertEquals(f.read(),"contents goes here if you please.\n\n")
 
 
 def testsuite():
@@ -208,8 +210,10 @@ def testsuite():
     suite.addTest(padtoblocksize.testsuite())
     from filelike.wrappers import crypto
     suite.addTest(crypto.testsuite())
-#    from filelike.wrappers import compress
-#    suite.addTest(compress.testsuite())
+    from filelike.wrappers import buffered
+    suite.addTest(buffered.testsuite())
+    from filelike.wrappers import compress
+    suite.addTest(compress.testsuite())
     from filelike.wrappers import unix
     suite.addTest(unix.testsuite())
     from filelike.wrappers import slice

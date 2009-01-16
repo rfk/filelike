@@ -3,7 +3,7 @@
     filelike: a python module for creating and handling file-like objects.
 
 This module takes care of the groundwork for implementing and manipulating
-objects that implement a rich file-like interface, including reading, writing,
+objects that provide a rich file-like interface, including reading, writing,
 seeking and iteration.  It also provides a number of useful classes built on
 top of this functionality.
 
