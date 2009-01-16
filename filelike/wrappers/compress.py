@@ -57,11 +57,11 @@ class Decompress(FileWrapper):
         if "r" in mode:
             if "w" not in mode and "a" not in mode and "+" not in mode:
                 # Nice and easy, just a streaming decompress on read
-                myFileObj = Translate(fileobj,mode=mode,func=self.decompress)
+                myFileObj = Translate(fileobj,mode=mode,rfunc=self.decompress)
         else:
             if "-" in mode:
                 # Nice and easy, just a streaming compress on write
-                myFileObj = Translate(fileobj,mode=mode,func=self.compress)
+                myFileObj = Translate(fileobj,mode=mode,wfunc=self.compress)
         if not myFileObj:
             # Rats, writing + seekabilty == inefficient.
             # Operating in a buffer is the only sensible option
@@ -90,11 +90,11 @@ class Compress(FileWrapper):
         if "r" in mode:
             if "w" not in mode and "a" not in mode and "+" not in mode:
                 # Nice and easy, just a streaming compress on read
-                myFileObj = Translate(fileobj,mode=mode,func=self.compress)
+                myFileObj = Translate(fileobj,mode=mode,rfunc=self.compress)
         else:
             if "-" in mode:
                 # Nice and easy, just a streaming decompress on write
-                myFileObj = Translate(fileobj,mode=mode,func=self.decompress)
+                myFileObj = Translate(fileobj,mode=mode,wfunc=self.decompress)
         if not myFileObj:
             # Rats, writing + seekabilty == inefficient
             # Operating in a buffer is the only sensible option
@@ -112,6 +112,8 @@ class BZip2Mixin(object):
         # Compression function with flush and reset.
         c = [bz2.BZ2Compressor()]
         def compress(data):
+            if data == "":
+                return ""
             return c[0].compress(data)
         def c_flush():
             return c[0].flush()
@@ -204,8 +206,9 @@ class Test_BZip2(filelike.Test_ReadWriteSeek):
         self.assertEquals(c,self.contents[:10])
 
     def test_read_empty_file(self):
-        f = self.makeFile("","r")
+        f = BZip2(StringIO(""),"r")
         self.assertEquals(f.read(),bz2.compress(""))
+        f.close()
 
 
 class Test_UnBZip2(filelike.Test_ReadWriteSeek):
