@@ -1,6 +1,6 @@
 # filelike/__init__.py
 #
-# Copyright (C) 2006-2008, Ryan Kelly
+# Copyright (C) 2006-2009, Ryan Kelly
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -22,7 +22,7 @@
     filelike: a python module for creating and handling file-like objects.
 
 This module takes care of the groundwork for implementing and manipulating
-objects that implement a rich file-like interface, including reading, writing,
+objects that provide a rich file-like interface, including reading, writing,
 seeking and iteration.  It also provides a number of useful classes built on
 top of this functionality.
 
@@ -131,7 +131,28 @@ class FileLikeBase(object):
         * truncate()
         
     Unlike standard file objects, all read methods share the same buffer
-    and so can be freely mixed (e.g. read(), readline(), next(), ...)
+    and so can be freely mixed (e.g. read(), readline(), next(), ...).
+
+    This class understands and will accept the following mode strings,
+    with any additional characters being ignored:
+
+        * r    - open the file for reading only.
+        * r+   - open the file for reading and writing.
+        * r-   - open the file for streamed reading; do not allow seek/tell.
+        * w    - open the file for writing only; create the file if
+                 it doesn't exist; truncate it to zero length.
+        * w+   - open the file for reading and writing; create the file
+                 if it doesn't exist; truncate it to zero length.
+        * w-   - open the file for streamed writing; do not allow seek/tell.
+        * a    - open the file for writing only; create the file if it
+                 doesn't exist; place pointer at end of file.
+        * a+   - open the file for reading and writing; create the file
+                 if it doesn't exist; place pointer at end of file.
+
+    These are mostly standard except for the "-" indicator, which has
+    been added for efficiency purposes in cases where seeking can be
+    expensive to simulate (e.g. compressed files).  Note that any file
+    opened for both reading and writing must also support seeking.
     
     """
     
@@ -150,6 +171,7 @@ class FileLikeBase(object):
         self._rbuffer = None     # data that's been read but not returned
         self._wbuffer = None     # data that's been given but not written
         self._sbuffer = None     # data between real & apparent file pos
+        self._soffset = 0        # internal offset of file pointer
 
     def _check_mode(self,mode):
         """Check whether the file may be accessed in the given mode.
@@ -158,10 +180,14 @@ class FileLikeBase(object):
         if the file-like object has a 'mode' attribute, and it does not
         permit access in that mode.  If there is no 'mode' attribute,
         True is returned.
+
+        If seek support is not required, use "r-" or "w-" as the mode string.
         """
         if hasattr(self,"mode"):
             if "+" in self.mode:
                 return True
+            if "-" in self.mode and "-" not in mode:
+                return False    
             if mode == "r":
                 if "r" not in self.mode:
                     return False    
@@ -174,12 +200,16 @@ class FileLikeBase(object):
         """Check whether the file may be accessed in the given mode.
 
         'mode' must be one of "r" or "w", and this function raises IOError
-        if the file-like object has a <mode> attribute, and it does not
+        if the file-like object has a 'mode' attribute, and it does not
         permit access in that mode.
+
+        If seek support is not required, use "r-" or "w-" as the mode string.
         """
         if hasattr(self,"mode"):
             if "+" in self.mode:
                 return True
+            if "-" in self.mode and "-" not in mode:
+                raise IOError("File does not support seeking.")
             if mode == "r":
                 if "r" not in self.mode:
                     raise IOError("File not opened for reading")
@@ -191,7 +221,7 @@ class FileLikeBase(object):
         """Flush internal write buffer, if necessary."""
         if self.closed:
             raise IOError("File has been closed")
-        if self._check_mode("w") and self._wbuffer is not None:
+        if self._check_mode("w-") and self._wbuffer is not None:
             buffered = ""
             if self._sbuffer:
                 buffered = buffered + self._sbuffer
@@ -202,6 +232,15 @@ class FileLikeBase(object):
             if leftover:
                 raise IOError("Could not flush write buffer.")
     
+    def close(self):
+        """Flush write buffers and close the file.
+
+        The file may not be accessed further once it is closed.
+        """
+        if not self.closed:
+            self.flush()
+            self.closed = True
+
     def __del__(self):
         self.close()
 
@@ -211,15 +250,6 @@ class FileLikeBase(object):
     def __exit__(self,exc_type,exc_val,exc_tb):
         self.close()
         return False
-        
-    def close(self):
-        """Flush write buffers and close the file.
-
-        The file may not be accessed further once it is closed.
-        """
-        if not self.closed:
-            self.flush()
-            self.closed = True
     
     def next(self):
         """next() method complying with the iterator protocol.
@@ -237,6 +267,10 @@ class FileLikeBase(object):
 
     def seek(self,offset,whence=0):
         """Move the internal file pointer to the given location."""
+        if whence > 2 or whence < 0:
+            raise ValueError("Invalid value for 'whence': " + str(whence))
+        if hasattr(self,"mode") and "-" in self.mode:
+            raise IOError("File is not seekable.")
         # Ensure that there's nothing left in the write buffer
         self.flush()
         # Adjust for any data left in the read buffer
@@ -244,29 +278,38 @@ class FileLikeBase(object):
             offset = offset - len(self._rbuffer)
         self._rbuffer = None
         # Adjust for any discrepancy in actual vs apparent seek position
-        if whence == 1 and self._sbuffer:
-            offset = offset + len(self._sbuffer)
+        if whence == 1:
+            if self._sbuffer:
+                offset = offset + len(self._sbuffer)
+            if self._soffset:
+                offset = offset + self._soffset
         self._sbuffer = None
         # Shortcut the special case of staying put
         if offset == 0 and whence == 1:
             return
         # Try to do a whence-wise seek if it is implemented.
-        # Otherwise, simulate them all using an absolute seek.
         sbuf = None
         try:
             sbuf = self._seek(offset,whence)
         except NotImplementedError:
-            if whence == 1:
-                offset = self._tell() + offset
-            elif whence == 2:
-                if hasattr(self,"size"):
-                    offset = self.size + offset
+            # Try to simulate using an absolute seek.
+            try:
+                if whence == 1:
+                    offset = self._tell() + offset
+                elif whence == 2:
+                    if hasattr(self,"size"):
+                        offset = self.size + offset
+                    else:
+                        for ln in self: pass
+                        offset = self.tell() + offset
                 else:
-                    for ln in self: pass
-                    offset = self.tell() + offset
-            elif whence != 0:
-                raise ValueError("Invalid value for 'whence': " + str(whence))
-            sbuf = self._seek(offset,0)
+                    # absolute seek already failed, don't try again
+                    raise NotImplementedError
+                sbuf = self._seek(offset,0)
+            except NotImplementedError:
+                # Simulate by reseting to start
+                self._seek(0,0)
+                self._soffset = offset
         finally:
             self._sbuffer = sbuf
 
@@ -280,6 +323,8 @@ class FileLikeBase(object):
             pos = pos + len(self._wbuffer)
         if self._sbuffer:
             pos = pos + len(self._sbuffer)
+        if self._soffset:
+            pos = pos + self._soffset
         return pos
     
     def read(self,size=-1):
@@ -291,10 +336,22 @@ class FileLikeBase(object):
         """
         if self.closed:
             raise IOError("File has been closed")
-        self._assert_mode("r")
+        self._assert_mode("r-")
         # If we were previously writing, ensure position is correct
         if self._wbuffer is not None:
             self.seek(0,1)
+        # Discard any data that should have been seeked over
+        if self._sbuffer:
+            s = len(self._sbuffer)
+            self._sbuffer = None
+            self.read(s)
+        elif self._soffset:
+            s = self._soffset
+            self._soffset = 0
+            while s > self._bufsize:
+                self.read(self._bufsize)
+                s -= self._bufsize
+            self.read(s)
         # Should the entire file be read?
         if size <= 0:
             if self._rbuffer:
@@ -309,9 +366,6 @@ class FileLikeBase(object):
             output = "".join(data)
         # Otherwise, we need to return a specific amount of data
         else:
-            # Adjust for any seek offset, which will be discarded
-            if self._sbuffer:
-                size = size + len(self._sbuffer)
             if self._rbuffer:
                 newData = self._rbuffer
                 data = [newData]
@@ -333,11 +387,6 @@ class FileLikeBase(object):
             else:
                 self._rbuffer = ""
             output = data
-        # Remove data to account for the seek offset
-        if self._sbuffer:
-            assert output.startswith(self._sbuffer)
-            output = output[len(self._sbuffer):]
-            self._sbuffer = None
         return output
         
     def readline(self,size=-1):
@@ -383,7 +432,7 @@ class FileLikeBase(object):
         """Write the given string to the file."""
         if self.closed:
             raise IOError("File has been closed")
-        self._assert_mode("w")
+        self._assert_mode("w-")
         # If we were previusly reading, ensure position is correct
         if self._rbuffer is not None:
             self.seek(0,1)
@@ -392,6 +441,11 @@ class FileLikeBase(object):
         if self._sbuffer:
             string = self._sbuffer + string
             self._sbuffer = None
+        elif self._soffset:
+            s = self._soffset
+            self._soffset = 0
+            string = self.read(s) + string
+            self.seek(0,0)
         if self._wbuffer:
             string = self._wbuffer + string
         leftover = self._write(string)
@@ -450,11 +504,11 @@ class FileLikeBase(object):
         it should be positioned at a convenient *smaller* offset and the
         file data between the real and apparent position should be returned.
 
-        This method *must* implement the standard behavior for whence=0,
-        which is to treat 'offset' as an absolute position from the start
-        of the file.  If other whence behaviours are difficult to implement,
-        this method may raise NotImplementedError and they will be
-        simulated in terms of an absolute seek
+        At minimum, this method must implement the ability to seek to
+        the start of the file, i.e. offset=0 and whence=0.  If more
+        complex seeks are difficult to implement then it may raise
+        NotImplementedError to have them simulated (inefficiently) by
+        the higher-level mahinery of this class.
         """
         raise IOError("Object not seekable")
 
@@ -595,6 +649,18 @@ def is_filelike(obj,mode="rw"):
             for a in attrs:
                 if not hasattr(obj,a):
                     return False
+    # Check for seekability
+    if "-" not in mode:
+        if isinstance(obj,FileLikeBase):
+            if not hasattr(obj,"_seek"):
+                return False
+            if obj._seek.im_class is FileLikeBase:
+                return False
+        else:
+            attrs = ("seek","tell",)
+            for a in attrs:
+                if not hasattr(obj,a):
+                    return False
     return True
 
 
@@ -723,14 +789,14 @@ class join(FileLikeBase):
 def slice(f,start=0,stop=None,mode=None,resizable=False):
     """Manipulate a portion of a file-like object.
 
-    This function simple exposes the class filelike.wrappers.Slice
+    This function simply exposes the class filelike.wrappers.Slice
     at the top-level of the module, since it has a nice symmetry
     with the 'join' operation.
     """
     return filelike.wrappers.Slice(f,start,stop,mode,resizable)
 
 
-def to_filelike(obj,mode="rw"):
+def to_filelike(obj,mode="r+"):
     """Convert 'obj' to a file-like object if possible.
     
     This method takes an arbitrary object 'obj', and attempts to
@@ -738,9 +804,8 @@ def to_filelike(obj,mode="rw"):
     object itself if it is already file-like, or some sort of
     wrapper class otherwise.
     
-    'mode', if provided, should specify how the results object
-    will be accessed - "r" for read, "w" for write, or "rw" for
-    both.
+    'mode', if provided, should specify how the resulting object
+    will be accessed.
     
     If the object cannot be converted, ValueError is raised.
     """
@@ -753,22 +818,28 @@ def to_filelike(obj,mode="rw"):
     # Anything with read() and/or write() can be trivially wrapped
     hasRead = hasattr(obj,"read")
     hasWrite = hasattr(obj,"write")
+    hasSeek = hasattr(obj,"seek")
     if "r" in mode:
-        if "w" in mode or "a" in mode:
-            if hasRead and hasWrite:
+        if "w" in mode or "a" in mode or "+" in mode:
+            if hasRead and hasWrite and hasSeek:
+                return filelike.wrappers.FileWrapper(obj)
+        elif "-" not in mode:
+            if hasRead and hasSeek:
                 return filelike.wrappers.FileWrapper(obj)
         else:
             if hasRead:
                 return filelike.wrappers.FileWrapper(obj)
     if "w" in mode or "a" in mode:
-        if hasWrite:
+        if "-" not in mode:
+            if hasWrite and hasSeek:
+                return filelike.wrappers.FileWrapper(obj)
+        elif hasWrite:
             return filelike.wrappers.FileWrapper(obj)
     # TODO: lots more could be done here...
     raise ValueError("Could not make object file-like: %s", (obj,))
 
 
-
-## TODO: unittests for is_filelike and to_filelike
+##  Testcases start here
 
 
 class Test_Read(unittest.TestCase):
@@ -909,6 +980,91 @@ class Test_Join(Test_ReadWriteSeek):
         return join(files)
 
 
+class Test_IsTo(unittest.TestCase):
+    """Tests for is_filelike/to_filelike."""
+
+    def test_isfilelike(self):
+        """Test behaviour of is_filelike."""
+        self.assert_(is_filelike(tempfile.TemporaryFile()))
+        self.assert_(is_filelike(tempfile.TemporaryFile("r"),"r"))
+        self.assert_(is_filelike(tempfile.TemporaryFile("r"),"w"))
+        self.assert_(is_filelike(StringIO()))
+
+    def test_tofilelike_read(self):
+        """Test behavior of to_filelike for mode "r-"."""
+        class F:
+            def read(self,sz=-1):
+                return ""
+        f = to_filelike(F(),"r-")
+        self.assertEquals(f.__class__,wrappers.FileWrapper)
+        self.assertEquals(f.read(),"")
+        self.assertRaises(ValueError,to_filelike,F(),"r")
+        self.assertRaises(ValueError,to_filelike,F(),"w-")
+        self.assertRaises(ValueError,to_filelike,F(),"rw")
+
+    def test_tofilelike_readseek(self):
+        """Test behavior of to_filelike for mode "r"."""
+        class F:
+            def read(self,sz=-1):
+                return ""
+            def seek(self,offset,whence):
+                pass
+        f = to_filelike(F(),"r")
+        self.assertEquals(f.__class__,wrappers.FileWrapper)
+        self.assertEquals(f.read(),"")
+        self.assertRaises(ValueError,to_filelike,F(),"w")
+        self.assertRaises(ValueError,to_filelike,F(),"w-")
+        self.assertRaises(ValueError,to_filelike,F(),"rw")
+
+    def test_tofilelike_write(self):
+        """Test behavior of to_filelike for mode "w-"."""
+        class F:
+            def write(self,data):
+                pass
+        f = to_filelike(F(),"w-")
+        self.assertEquals(f.__class__,wrappers.FileWrapper)
+        self.assertRaises(ValueError,to_filelike,F(),"w")
+        self.assertRaises(ValueError,to_filelike,F(),"r")
+        self.assertRaises(ValueError,to_filelike,F(),"r-")
+        self.assertRaises(ValueError,to_filelike,F(),"rw")
+
+    def test_tofilelike_writeseek(self):
+        """Test behavior of to_filelike for mode "w"."""
+        class F:
+            def write(self,data):
+                pass
+            def seek(self,offset,whence):
+                pass
+        f = to_filelike(F(),"w")
+        self.assertEquals(f.__class__,wrappers.FileWrapper)
+        self.assertRaises(ValueError,to_filelike,F(),"r")
+        self.assertRaises(ValueError,to_filelike,F(),"r-")
+
+    def test_tofilelike_readwrite(self):
+        """Test behavior of to_filelike for mode "rw"."""
+        class F:
+            def write(self,data):
+                pass
+            def read(self,sz=-1):
+                return ""
+            def seek(self,offset,whence):
+                pass
+        f = to_filelike(F(),"rw")
+        self.assertEquals(f.__class__,wrappers.FileWrapper)
+        self.assertEquals(f.read(),"")
+
+    def test_tofilelike_stringio(self):
+        """Test behaviour of to_filelike on StringIO instances."""
+        f = to_filelike(StringIO())
+        self.assert_(isinstance(f,StringIO))
+
+    def test_tofilelike_string(self):
+        """Test behaviour of to_filelike on strings."""
+        f = to_filelike("testing")
+        self.assert_(isinstance(f,StringIO))
+        self.assertEquals(f.read(),"testing")
+        
+
 class Test_Docs(unittest.TestCase):
     """Unittests for our documentation."""
 
@@ -933,6 +1089,7 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_StringIO))
     suite.addTest(unittest.makeSuite(Test_TempFile))
     suite.addTest(unittest.makeSuite(Test_Join))
+    suite.addTest(unittest.makeSuite(Test_IsTo))
     from filelike import wrappers
     suite.addTest(wrappers.testsuite())
     from filelike import pipeline
