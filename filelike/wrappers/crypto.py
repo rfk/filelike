@@ -136,7 +136,6 @@ class Test_Encrypt(filelike.Test_ReadWriteSeek):
         
     def setUp(self):
         from Crypto.Cipher import DES
-        # Example inspired by the PyCrypto manual
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
         super(Test_Encrypt,self).setUp()
 
@@ -155,7 +154,6 @@ class Test_Decrypt(filelike.Test_ReadWriteSeek):
         
     def setUp(self):
         from Crypto.Cipher import DES
-        # Example inspired by the PyCrypto manual
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
         super(Test_Decrypt,self).setUp()
 
