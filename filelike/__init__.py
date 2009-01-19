@@ -173,7 +173,7 @@ class FileLikeBase(object):
         self._sbuffer = None     # data between real & apparent file pos
         self._soffset = 0        # internal offset of file pointer
 
-    def _check_mode(self,mode):
+    def _check_mode(self,mode,mstr=None):
         """Check whether the file may be accessed in the given mode.
 
         'mode' must be one of "r" or "w", and this function returns False
@@ -182,40 +182,49 @@ class FileLikeBase(object):
         True is returned.
 
         If seek support is not required, use "r-" or "w-" as the mode string.
+
+        To check a mode string other than self.mode, pass it in as the
+        second argument.
         """
-        if hasattr(self,"mode"):
-            if "+" in self.mode:
+        if mstr is None:
+            try:
+                mstr = self.mode
+            except AttributeError:
                 return True
-            if "-" in self.mode and "-" not in mode:
+        if "+" in mstr:
+            return True
+        if "-" in mstr and "-" not in mode:
+            return False    
+        if "r" in mode:
+            if "r" not in mstr:
                 return False    
-            if mode == "r":
-                if "r" not in self.mode:
-                    return False    
-            if mode == "w":
-                if "w" not in self.mode and "a" not in self.mode:
-                    return False
+        if "w" in mode:
+            if "w" not in mstr and "a" not in mstr:
+                return False
         return True
         
-    def _assert_mode(self,mode):
+    def _assert_mode(self,mode,mstr=None):
         """Check whether the file may be accessed in the given mode.
 
-        'mode' must be one of "r" or "w", and this function raises IOError
-        if the file-like object has a 'mode' attribute, and it does not
-        permit access in that mode.
-
-        If seek support is not required, use "r-" or "w-" as the mode string.
+        This method is equivalent to _check_assert(), but raises IOError
+        instead of returning False.
         """
-        if hasattr(self,"mode"):
-            if "+" in self.mode:
+        if mstr is None:
+            try:
+                mstr = self.mode
+            except AttributeError:
                 return True
-            if "-" in self.mode and "-" not in mode:
-                raise IOError("File does not support seeking.")
-            if mode == "r":
-                if "r" not in self.mode:
-                    raise IOError("File not opened for reading")
-            if mode == "w":
-                if "w" not in self.mode and "a" not in self.mode:
-                    raise IOError("File not opened for writing")
+        if "+" in mstr:
+            return True
+        if "-" in mstr and "-" not in mode:
+            raise IOError("File does not support seeking.")
+        if "r" in mode:
+            if "r" not in mstr:
+                raise IOError("File not opened for reading")
+        if "w" in mode:
+            if "w" not in mstr and "a" not in mstr:
+                raise IOError("File not opened for writing")
+        return True
     
     def flush(self):
         """Flush internal write buffer, if necessary."""
@@ -285,6 +294,7 @@ class FileLikeBase(object):
             if self._soffset:
                 offset = offset + self._soffset
         self._sbuffer = None
+        self._soffset = 0
         # Shortcut the special case of staying put
         if offset == 0 and whence == 1:
             return
@@ -921,12 +931,15 @@ class Test_ReadWriteSeek(Test_ReadWrite):
         self.file.seek(7)
         self.assertEquals(self.file.tell(),7)
         self.assertEquals(self.file.read(),self.contents[7:])
+        self.file.seek(0,0)
+        self.assertEquals(self.file.tell(),0)
 
     def test_read_write_seek(self):
         c = self.file.read(5)
         self.assertEquals(c,self.contents[:5])
         self.file.write("hello")
         self.file.seek(0)
+        self.assertEquals(self.file.tell(),0)
         c = self.file.read(10)
         self.assertEquals(c,self.contents[:5] + "hello")
 

@@ -36,9 +36,9 @@ import unittest
 from StringIO import StringIO
 
 try:
-    from tempfile import SpooledTemporaryFile as TempFile
+    from tempfile import SpooledTemporaryFile as TemporaryFile
 except ImportError:
-    from tempfile import NamedTemporaryFile as TempFile
+    from tempfile import TemporaryFile
 
 
 class Buffered(FileWrapper):
@@ -53,7 +53,7 @@ class Buffered(FileWrapper):
     def __init__(self,fileobj,mode=None):
         """Buffered file wrapper constructor."""
         super(Buffered,self).__init__(fileobj,mode)
-        self._buffer = TempFile()
+        self._buffer = TemporaryFile()
         self._in_eof = False
         self._in_pos = 0
         if hasattr(self,"mode") and "a" in self.mode:

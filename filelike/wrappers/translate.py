@@ -22,9 +22,13 @@
     filelike.wrappers.translate:  pass file contents through translation func
     
 This module provides the filelike wrapper 'Translate', which passes file
-data through a translation function as it is read/written.  For more efficient
-operation is also provides 'BytewiseTranslate', which assumes that the
-translation takes place on a byte-by-byte basis.
+data through a translation function as it is read/written.  The default mode
+of operation presumes a streaming translation function, which makes operations
+such as seeking, or switching between reads and writes, quite expensive.
+
+For more efficient operation the class 'BytewiseTranslate' is provided, which
+assumes that the translation takes place on a byte-by-byte basis and can 
+therefore optimise these operations.
 
 """ 
 
@@ -44,73 +48,70 @@ class Translate(FileWrapper):
     
     The translating function must accept a string as its only argument,
     and return a transformed string representing the updated file contents.
-    
-    The default use case assumes either reading+writing with a symmetric
-    translation function, or exclusive reading or writing.  So, a single
-    function is used for translation on both reads and writes.  Separate
-    reading and writing translation functions may be provided using keyword
-    arguments 'rfunc' and 'wfunc' to the constructor.
+    If the function is symmetric than a single function may be specified;
+    to use separate functions for reading and writing, provide the two
+    keyword arguments 'rfunc' and 'wfunc'.
 
     If the transform needs to be flushed when reading/writing is finished, it
     should provide a flush() method that returns either None, or any data
     remaining to be read/written.  If it needs to be reset after flushing,
     it should provide a reset() method.
 
-    If the translaton function operates on a byte-by-byte basis and
+    If the translation function operates on a byte-by-byte basis and
     does not buffer any data, consider using the 'BytewiseTranslate'
     class instead; the efficiency of several operations can be improved
     dramatically given such properties of the translation function.
     """
     
-    def __init__(self,fileobj,func=None,mode=None,rfunc=None,wfunc=None):
+    def __init__(self,fileobj,rfunc=None,wfunc=None,mode=None):
         """Translate file wrapper constructor.
 
         'fileobj' must be the file-like object whose contents are to be
-        transformed, and 'func' the callable that will transform the
-        file's contents.  If separate reading/writing translations are
-        required, the keyword arguments 'rfunc' and 'wfunc' can be used 
-        in place of 'func'.
+        transformed, and 'rfunc' and 'wfunc' the callable objects that will
+        transform the file's contents.
         """
         super(Translate,self).__init__(fileobj,mode)
-        if func is not None:
-            if rfunc is not None:
-                raise ValueError("Cannot specify both <func> and <rfunc>")
-            if wfunc is not None:
-                raise ValueError("Cannot specify both <func> and <wfunc>")
-            self._rfunc = func
-            self._wfunc = func
-        else:
-            if hasattr(self,"mode"):
-              if "r" in self.mode or "+" in self.mode:
+        # rfunc must be provided for readable files
+        if self._check_mode("r-"):
+            if rfunc is None:
+                raise ValueError("Must provide 'rfunc' for readable files")
+        # wfunc should be given for writable files, but we default to
+        # using rfunc if it is specified.
+        if self._check_mode("w-"):
+            if wfunc is None:
                 if rfunc is None:
-                  raise ValueError("Must provide <rfunc> for readable files")
-              if "w" in self.mode or "a" in self.mode:
-                if wfunc is None:
-                  raise ValueError("Must provide <wfunc> for writable files")
-            self._rfunc = rfunc
-            self._wfunc = wfunc
+                    raise ValueError("Must provide 'wfunc' for writable files")
+                wfunc = rfunc
+        self._rfunc = self._normalise_func(rfunc)
+        self._wfunc = self._normalise_func(wfunc)
         self._pos = 0
         self._read_eof = False
-            
-    def _flush_rfunc(self):
-        """Call flush on the reading translation function, if necessary."""
-        if hasattr(self._rfunc,"flush"):
-            return self._rfunc.flush()
-        return None
-   
-    def _flush_wfunc(self):
-        """Call flush on the writing translation function, if necessary."""
-        if hasattr(self._wfunc,"flush"):
-            return self._wfunc.flush()
-        return None
+
+    def _normalise_func(self,func):
+        """Adjust a function to support flush() and reset() methods.
+
+        This avoids the need to constantly check for these methods
+        before invoking them.
+        """
+        def mknoop():
+            def noop():
+                return None
+            return noop
+        if func is None:
+            func = mknoop()
+        if not hasattr(func,"flush"):
+            func.flush = mknoop()
+        if not hasattr(func,"reset"):
+            func.reset = mknoop()
+        return func
 
     def flush(self):
-        data = self._flush_wfunc()
+        # TODO: this should read-and-write the rest of the data in the file
+        data = self._wfunc.flush()
         if data is not None:
             self._fileobj.write(data)
         super(Translate,self).flush()
-        if hasattr(self._wfunc,"reset"):
-            self.seek(self.tell(),0)
+        self.seek(self.tell(),0)
 
     def _read(self,sizehint=-1):
         if self._read_eof:
@@ -118,9 +119,9 @@ class Translate(FileWrapper):
         data = self._fileobj.read(sizehint)
         if data == "":
             self._read_eof = True
-            tData = self._flush_rfunc()
-            if not tData:
-                return None
+            tData = self._rfunc.flush()
+            if tData is None:
+                return tData
         else:
             tData = self._rfunc(data)
         self._pos += len(tData)
@@ -129,8 +130,9 @@ class Translate(FileWrapper):
     def _write(self,data,flushing=False):
         """Write the given data to the file."""
         self._pos += len(data)
-        self._fileobj.write(self._wfunc(data))
-
+        wData = self._wfunc(data)
+        self._fileobj.write(wData)
+ 
     def _tell(self):
         return self._pos
 

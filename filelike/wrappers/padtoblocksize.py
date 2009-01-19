@@ -22,7 +22,7 @@
     filelike.wrappers.padtoblocksize:  pad a file to a given blocksize
     
 This module provides the dual filelike wrappers 'PadToBlockSize' and 
-'UnPadToBlockSize' to handle padding or a file to a specified blocksize.
+'UnPadToBlockSize' to handle padding of a file to a specified blocksize.
 
 """ 
 
@@ -133,7 +133,7 @@ class PadToBlockSize(FileWrapper):
         return None
 
     def _seek(self,offset,whence):
-        """Seek to approximately 'offset' bytes from start of while.
+        """Seek to approximately 'offset' bytes from start of file.
 
         This method implements absolute seeks and will not seek to
         positions beyond the end of the file.  If you try to seek past
