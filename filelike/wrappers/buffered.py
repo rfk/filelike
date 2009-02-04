@@ -60,8 +60,8 @@ class Buffered(FileWrapper):
             self.seek(0,2)
 
     def flush(self):
-        # a no-op, we only want to write to the file on close
-        pass
+        # flush the buffer; we only write to the underlying file on close
+        self._buffer.flush()
 
     def _buffer_chunks(self):
         chunk = self._buffer.read(16*1024)

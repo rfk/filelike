@@ -1,4 +1,3 @@
-# filelike/wrappers/crypto.py
 #
 # Copyright (C) 2006-2008, Ryan Kelly
 #
