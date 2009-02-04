@@ -44,7 +44,9 @@ class FixedBlockSize(FileWrapper):
     chunking text to match the cipher's block size.
     
     No padding is added to the file is its length is not a multiple 
-    of the blocksize.
+    of the blocksize.  This might cause things to fail when this file
+    is flushed or closed, since an incorrectly-sized string could be
+    given in this case.
     """
     
     def __init__(self,fileobj,blocksize,mode=None):
@@ -138,7 +140,8 @@ class Test_FixedBlockSize5(filelike.Test_ReadWriteSeek):
                 self.assert_(size < 0 or size % self.blocksize == 0)
                 return f.read(size)
             def write(s,data):
-                self.assert_(len(data)%self.blocksize == 0)
+                if not s._flushing:
+                    self.assert_(len(data)%self.blocksize == 0)
                 f.write(data)
             def seek(s,offset,whence):
                 f.seek(offset,whence)
@@ -146,7 +149,17 @@ class Test_FixedBlockSize5(filelike.Test_ReadWriteSeek):
                 return f.tell()
             def flush(self):
                 f.flush()
-        return FixedBlockSize(BSFile(),self.blocksize)
+        bsf = BSFile()
+        bsf._flushing = False
+        fbsf = FixedBlockSize(bsf,self.blocksize)
+        # Patch it to indicate when it's flushing, so we don't raise errors
+        oldflush = fbsf.flush
+        def newflush():
+            bsf._flushing = True
+            oldflush()
+            bsf._flushing = False
+        fbsf.flush = newflush
+        return fbsf
 
 
 class Test_FixedBlockSize7(Test_FixedBlockSize5):

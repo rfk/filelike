@@ -318,6 +318,9 @@ class Test_PadToBlockSize5(filelike.Test_ReadWriteSeek):
         f.flush()
         self.assertEquals(f._fileobj.getvalue(),txt)
 
+    def test_write_at_end(self):
+        pass
+
 
 class Test_PadToBlockSize7(Test_PadToBlockSize5):
     """Testcases for PadToBlockSize with blocksize=7."""

@@ -177,8 +177,18 @@ class Test_Slice_StartStop(filelike.Test_ReadWriteSeek):
             f.seek(0,2)
         return f
 
-class Test_Slice_Extras(unittest.TestCase):
-    """Tests for extra functionality provides by slices."""
+    def test_write_at_end(self):
+        method = super(Test_Slice_StartStop,self).test_write_at_end
+        self.assertRaises(IOError,method)
+
+class Test_Slice_StartStopResize(filelike.Test_ReadWriteSeek):
+    """Testcases for the Slice wraper, with resizable stop."""
+
+    def makeFile(self,contents,mode):
+        f = Slice(StringIO("testing" + contents + "hello"),7,-5,resizable=True)
+        if "a" in mode:
+            f.seek(0,2)
+        return f
     
     def test_resizability(self):
         """Test that resizing slices works correctly."""
@@ -204,6 +214,6 @@ def testsuite():
     suite.addTest(unittest.makeSuite(Test_Slice_Whole))
     suite.addTest(unittest.makeSuite(Test_Slice_Start))
     suite.addTest(unittest.makeSuite(Test_Slice_StartStop))
-    suite.addTest(unittest.makeSuite(Test_Slice_Extras))
+    suite.addTest(unittest.makeSuite(Test_Slice_StartStopResize))
     return suite
 

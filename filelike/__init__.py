@@ -959,6 +959,13 @@ class Test_ReadWriteSeek(Test_ReadWrite):
         self.file.seek(3,1)
         self.assertEquals(self.file.tell(),len(self.contents)-4)
 
+    def test_write_at_end(self):
+        self.assertEquals(self.file.tell(),0)
+        self.file.seek(0,2)
+        self.file.write("testable")
+        self.file.seek(0,0)
+        self.assertEquals(self.file.read(),self.contents+"testable")
+
 
 class Test_StringIO(Test_ReadWriteSeek):
     """Run our testcases against StringIO."""
