@@ -27,6 +27,7 @@ dealing with encrypted files.
 """ 
 
 import filelike
+from filelike.wrappers import FileWrapper
 from filelike.wrappers.translate import Translate, BytewiseTranslate
 from filelike.wrappers.buffered import Buffered
 from filelike.wrappers.fixedblocksize import FixedBlockSize
@@ -34,7 +35,7 @@ from filelike.wrappers.fixedblocksize import FixedBlockSize
 import unittest
 from StringIO import StringIO
 
-class Decrypt(FixedBlockSize):
+class Decrypt(FileWrapper):
     """Class for reading and writing to an encrypted file.
     
     This class accesses an encrypted file using a ciphering object
@@ -61,17 +62,15 @@ class Decrypt(FixedBlockSize):
         to FileWrapper.__init__
         """
         self._cipher = cipher
-        self.blocksize = cipher.block_size
         if cipher.mode == 1:
             # MODE_ECB is a bytewise translation
-            self._bytewise = True
             myFileObj = BytewiseTranslate(fileobj,mode=mode,
                                                   rfunc=cipher.decrypt,
                                                   wfunc=cipher.encrypt)
+            myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
         else:
             # Other modes are stateful translations.
             # To reset them, we simply reset the initialisation vector
-            self._bytewise = False
             initialIV = cipher.IV
             def rfunc(data):
                 return cipher.decrypt(data)
@@ -82,6 +81,7 @@ class Decrypt(FixedBlockSize):
             rfunc.reset = reset
             wfunc.reset = reset
             myFileObj = Translate(fileobj,mode=mode,rfunc=rfunc,wfunc=wfunc)
+            myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
             #  To allow writes with seeks, we need to buffer.
             #  TODO: find a way around this.
             if mode is None:
@@ -93,18 +93,10 @@ class Decrypt(FixedBlockSize):
                 myFileObj = Buffered(myFileObj,mode=mode)
             elif self._check_mode("w",mode) and not self._check_mode("w-",mode):
                 myFileObj = Buffered(myFileObj,mode=mode)
-        super(Decrypt,self).__init__(myFileObj,self.blocksize,mode=mode)
-
-    def _seek(self,offset,whence):
-        # For stateful translations, don't bother with fancy seeks since
-        # the underlying file will have to reset to start anyway.
-        if not self._bytewise:
-            if offset > 0 or whence > 0:
-                raise NotImplementedError
-        return super(Decrypt,self)._seek(offset,whence)
+        super(Decrypt,self).__init__(myFileObj,mode=mode)
 
 
-class Encrypt(FixedBlockSize):
+class Encrypt(FileWrapper):
     """Class for reading and writing to an decrypted file.
     
     This class accesses a decrypted file using a ciphering object
@@ -132,17 +124,15 @@ class Encrypt(FixedBlockSize):
         to FileWrapper.__init__
         """
         self._cipher = cipher
-        self.blocksize = cipher.block_size
         if cipher.mode == 1:
             # MODE_ECB is a bytewise translation
-            self._bytewise = True
             myFileObj = BytewiseTranslate(fileobj,mode=mode,
                                                   rfunc=cipher.encrypt,
                                                   wfunc=cipher.decrypt)
+            myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
         else:
             # Other modes are stateful translations.
             # To reset them, we simply reset the initialisation vector
-            self._bytewise = False
             initialIV = cipher.IV
             def rfunc(data):
                 return cipher.encrypt(data)
@@ -153,6 +143,7 @@ class Encrypt(FixedBlockSize):
             rfunc.reset = reset
             wfunc.reset = reset
             myFileObj = Translate(fileobj,mode=mode,rfunc=rfunc,wfunc=wfunc)
+            myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
             #  To allow writes with seeks, we need to buffer.
             #  TODO: find a way around this.
             if mode is None:
@@ -164,15 +155,7 @@ class Encrypt(FixedBlockSize):
                 myFileObj = Buffered(myFileObj,mode=mode)
             elif self._check_mode("w",mode) and not self._check_mode("w-",mode):
                 myFileObj = Buffered(myFileObj,mode=mode)
-        super(Encrypt,self).__init__(myFileObj,self.blocksize,mode=mode)
-
-    def _seek(self,offset,whence):
-        # For stateful translations, don't bother with fancy seeks since
-        # the underlying file will have to reset to start anyway.
-        if not self._bytewise:
-            if offset > 0 or whence > 0:
-                raise NotImplementedError
-        return super(Encrypt,self)._seek(offset,whence)
+        super(Encrypt,self).__init__(myFileObj,mode=mode)
 
 
 class Test_Encrypt(filelike.Test_ReadWriteSeek):
