@@ -76,8 +76,11 @@ class Buffered(FileWrapper):
             if self._check_mode("r"):
                 if not self._in_eof:
                     self._read_rest()
-                self._fileobj.seek(0,0)
-            self._buffer.seek(0,0)
+                if "a" in self.mode:
+                    self._buffer.seek(self._in_pos)
+                else:
+                    self._fileobj.seek(0,0)
+                    self._buffer.seek(0)
             for chunk in self._buffer_chunks():
                 self._fileobj.write(chunk)
         super(Buffered,self).close()

@@ -1,1 +1,3 @@
 
+restrict all writes in append mode to go to the end of the file
+
