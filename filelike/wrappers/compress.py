@@ -28,12 +28,9 @@ each building other compression wrappers.
 """ 
 
 import filelike
-from filelike.wrappers import FileWrapper
+from filelike.wrappers import FileWrapper, Debug
 from filelike.wrappers.translate import Translate
 from filelike.wrappers.buffered import Buffered
-
-import unittest
-from StringIO import StringIO
 
 import bz2
 
@@ -67,7 +64,12 @@ class Decompress(FileWrapper):
             # Operating in a buffer is the only sensible option
             myFileObj = Translate(fileobj,mode=mode,rfunc=self.decompress,wfunc=self.compress)
             myFileObj = Buffered(myFileObj,mode=mode)
+        #myFileObj = Debug(myFileObj,"BZ")
         super(Decompress,self).__init__(myFileObj,mode=mode)
+
+    def _read(self,sizehint=-1):
+        data = super(Decompress,self)._read(sizehint)
+        return data
 
 
 class Compress(FileWrapper):
@@ -172,94 +174,4 @@ def _BZip2_decoder(fileobj):
     f.name = fileobj.name[:-4]
     return f
 filelike.open.decoders.append(_BZip2_decoder)
-    
-
-class Test_BZip2(filelike.Test_ReadWriteSeek):
-    """Tetcases for BZip2 wrapper class."""
-
-    contents = bz2.compress("This is my compressed\n test data")
-
-    def makeFile(self,contents,mode):
-        return BZip2(StringIO(bz2.decompress(contents)),mode)
-
-    #  We cant just write text into a BZip stream, so we have
-    #  to adjust these tests
-
-    def test_write_read(self):
-        self.file.write(self.contents[0:5])
-        c = self.file.read()
-        self.assertEquals(c,self.contents[5:])
-
-    def test_read_write_read(self):
-        c = self.file.read(5)
-        self.assertEquals(c,self.contents[:5])
-        self.file.write(self.contents[5:10])
-        c = self.file.read(5)
-        self.assertEquals(c,self.contents[10:15])
-
-    def test_read_write_seek(self):
-        c = self.file.read(5)
-        self.assertEquals(c,self.contents[:5])
-        self.file.write(self.contents[5:10])
-        self.file.seek(0)
-        c = self.file.read(10)
-        self.assertEquals(c,self.contents[:10])
-
-    def test_read_empty_file(self):
-        f = BZip2(StringIO(""),"r")
-        self.assertEquals(f.read(),bz2.compress(""))
-        f.close()
-
-    def test_resulting_file(self):
-        """Make sure BZip2 changes are pushed through to actual file."""
-        import tempfile
-        import os
-        (_,fn) = tempfile.mkstemp()
-        try:
-            f = open(fn,"w")
-            f.write("hello world!")
-            f.close()
-            f = BZip2(open(fn,"r+"))
-            f.read(6)
-            f.seek(-6,1)
-            f.write(bz2.compress("hello Australia!"))
-            f.close()
-            self.assertEquals(open(fn).read(),"hello Australia!")
-        finally:
-          os.unlink(fn)
-
-
-class Test_UnBZip2(filelike.Test_ReadWriteSeek):
-    """Tetcases for UnBZip2 wrapper class."""
-
-    contents = "This is my uncompressed\n test data"
-
-    def makeFile(self,contents,mode):
-        return UnBZip2(StringIO(bz2.compress(contents)),mode)
-
-    def test_resulting_file(self):
-        """Make sure UnBZip2 changes are pushed through to actual file."""
-        import tempfile
-        import os
-        (_,fn) = tempfile.mkstemp()
-        try:
-            f = open(fn,"w")
-            f.write(bz2.compress("hello world!"))
-            f.close()
-            f = UnBZip2(open(fn,"r+"))
-            f.read(6)
-            f.write("Ausralia!")
-            f.seek(-6,1)
-            f.write("tralia!")
-            f.close()
-            self.assertEquals(open(fn).read(),bz2.compress("hello Australia!"))
-        finally:
-          os.unlink(fn)
-
-
-def testsuite():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_BZip2))
-    suite.addTest(unittest.makeSuite(Test_UnBZip2))
-    return suite
 

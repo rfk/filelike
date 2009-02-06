@@ -1,6 +1,6 @@
-# filelike/wrappers/translate.py
+# filelike/wrappers/buffered.py
 #
-# Copyright (C) 2006-2009, Ryan Kelly
+# Copyright (C) 2009, Ryan Kelly
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -31,9 +31,6 @@ write() being called.
 
 import filelike
 from filelike.wrappers import FileWrapper
-
-import unittest
-from StringIO import StringIO
 
 try:
     from tempfile import SpooledTemporaryFile as TemporaryFile
@@ -139,16 +136,4 @@ class Buffered(FileWrapper):
         self._in_eof = True 
         self._buffer.seek(pos)
 
-
-class Test_Buffered(filelike.Test_ReadWriteSeek):
-    """Testcases for the Buffered class."""
-    
-    def makeFile(self,contents,mode):
-        return Buffered(StringIO(contents),mode)
-
-    
-def testsuite():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_Buffered))
-    return suite
 

@@ -47,6 +47,6 @@ setup(name=NAME,
       ext_modules=EXT_MODULES,
       package_data=PKG_DATA,
       license=LICENSE,
-      test_suite="filelike.testsuite",
+      test_suite="nose.collector",
      )
 

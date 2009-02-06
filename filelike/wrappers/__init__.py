@@ -51,12 +51,7 @@ the file on-the-fly as it is read.
 import filelike
 from filelike import FileLikeBase
 
-import os
-import unittest
-from StringIO import StringIO
 import warnings
-import tempfile
-
 
 def _deprecate(oldName,newClass):
     """Mark an old class name as deprecated."""
@@ -138,6 +133,8 @@ class FileWrapper(FileLikeBase):
 ##  Import the various classes from our sub-modules,
 ##  and mark old names as deprecated.
 
+from filelike.wrappers.debug import Debug
+
 from filelike.wrappers.translate import Translate, BytewiseTranslate
 _deprecate("TransFile",Translate)
 
@@ -159,62 +156,4 @@ _deprecate("BZ2File",UnBZip2)
 from filelike.wrappers.unix import Head
 
 from filelike.wrappers.slice import Slice
-
-
-##  test cases
-
-
-class Test_FileWrapper(filelike.Test_ReadWriteSeek):
-    """Testcases for FileWrapper base class."""
-    
-    def makeFile(self,contents,mode):
-        return FileWrapper(StringIO(contents),mode)
-
-
-class Test_OpenerDecoders(unittest.TestCase):
-    """Testcases for the filelike.Opener decoder functions."""
-    
-    def setUp(self):
-        import tempfile
-        handle, self.tfilename = tempfile.mkstemp()
-        self.tfile = os.fdopen(handle,"w+b")
-
-    def tearDown(self):
-        os.unlink(self.tfilename)
-
-    def test_LocalFile(self):
-        """Test opening a simple local file."""
-        self.tfile.write("contents")
-        self.tfile.flush()
-        f = filelike.open(self.tfilename,"r")
-        self.assertEquals(f.name,self.tfilename)
-        self.assertEquals(f.read(),"contents")
-    
-    def test_RemoteBzFile(self):
-        """Test opening a remote BZ2 file."""
-        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2")
-        self.assertEquals(f.read(),"contents goes here if you please.\n\n")
-
-
-def testsuite():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_FileWrapper))
-    suite.addTest(unittest.makeSuite(Test_OpenerDecoders))
-    from filelike.wrappers import translate
-    suite.addTest(translate.testsuite())
-    from filelike.wrappers import fixedblocksize
-    suite.addTest(fixedblocksize.testsuite())
-    from filelike.wrappers import padtoblocksize
-    suite.addTest(padtoblocksize.testsuite())
-    from filelike.wrappers import crypto
-    suite.addTest(crypto.testsuite())
-    from filelike.wrappers import buffered
-    suite.addTest(buffered.testsuite())
-    from filelike.wrappers import compress
-    suite.addTest(compress.testsuite())
-    from filelike.wrappers import unix
-    suite.addTest(unix.testsuite())
-    from filelike.wrappers import slice
-    suite.addTest(slice.testsuite())
-    return suite
 

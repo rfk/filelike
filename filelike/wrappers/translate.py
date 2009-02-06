@@ -33,10 +33,7 @@ therefore optimise these operations.
 """ 
 
 import filelike
-from filelike.wrappers import FileWrapper
-
-import unittest
-from StringIO import StringIO
+from filelike.wrappers import FileWrapper, Debug
 
 
 class Translate(FileWrapper):
@@ -70,6 +67,7 @@ class Translate(FileWrapper):
         transformed, and 'rfunc' and 'wfunc' the callable objects that will
         transform the file's contents.
         """
+        #fileobj = Debug(fileobj,"TR")
         super(Translate,self).__init__(fileobj,mode)
         # rfunc must be provided for readable files
         if self._check_mode("r-"):
@@ -150,16 +148,7 @@ class Translate(FileWrapper):
         if hasattr(self._wfunc,"reset"):
             self._wfunc.reset()
 
-
-class Test_Translate(filelike.Test_ReadWriteSeek):
-    """Testcases for the Translate class, with null translation func."""
-    
-    def makeFile(self,contents,mode):
-        def noop(string):
-            return string
-        return Translate(StringIO(contents),noop,mode=mode)
-
-    
+ 
 class BytewiseTranslate(FileWrapper):
     """Class implementing a bytewise translation on a file's contents.
     
@@ -223,21 +212,4 @@ class BytewiseTranslate(FileWrapper):
 
     # Since this is a bytewise translation, the default seek() and tell()
     # will do what we want - simply move the underlying file object.
-
-
-class Test_BytewiseTranslate(filelike.Test_ReadWriteSeek):
-    """Testcases for the BytewiseTranslate class."""
-    
-    def makeFile(self,contents,mode):
-        def rot13(string):
-            return string.encode("rot13")
-        return BytewiseTranslate(StringIO(contents.encode("rot13")),rot13,mode=mode)
-
-
-
-def testsuite():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_Translate))
-    suite.addTest(unittest.makeSuite(Test_BytewiseTranslate))
-    return suite
 

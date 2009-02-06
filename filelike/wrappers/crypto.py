@@ -31,8 +31,6 @@ from filelike.wrappers.translate import Translate, BytewiseTranslate
 from filelike.wrappers.buffered import Buffered
 from filelike.wrappers.fixedblocksize import FixedBlockSize
 
-import unittest
-from StringIO import StringIO
 
 class Decrypt(FileWrapper):
     """Class for reading and writing to an encrypted file.
@@ -155,95 +153,4 @@ class Encrypt(FileWrapper):
             elif self._check_mode("w",mode) and not self._check_mode("w-",mode):
                 myFileObj = Buffered(myFileObj,mode=mode)
         super(Encrypt,self).__init__(myFileObj,mode=mode)
-
-
-class Test_Encrypt(filelike.Test_ReadWriteSeek):
-    """Testcases for the Encrypt wrapper class"""
-    
-    contents = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
-    plaintext = "Guido van Rossum is a space alien." + "\0"*6
-
-    def makeFile(self,contents,mode):
-        if len(contents) % self.cipher.block_size != 0:
-            raise ValueError("content must be multiple of blocksize.")
-        f = Encrypt(StringIO(self.cipher.decrypt(contents)),self.cipher,mode=mode)
-        return f
-        
-    def setUp(self):
-        from Crypto.Cipher import DES
-        self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
-        super(Test_Encrypt,self).setUp()
-
-
-class Test_EncryptFB(filelike.Test_ReadWriteSeek):
-    """Testcases for the Encrypt wrapper class, using a feedback cipher"""
-    
-    contents = "\xc9\xa3b\x18\xeb\xe8\xbe3\x84\x9a,\x025\x13\xb0\xb7It\x90@a\xb1\xc2\x13\x04_6c\x19\x0b\xf2\xcd\x0eD\xfb?\xf5\xbb\xad\xc8"
-    plaintext = "Guido van Rossum is a space alien." + "\0"*6
-
-    def makeFile(self,contents,mode):
-        IV = self.cipher.IV
-        if len(contents) % self.cipher.block_size != 0:
-            raise ValueError("content must be multiple of blocksize.")
-        f = Encrypt(StringIO(self.cipher.decrypt(contents)),self.cipher,mode=mode)
-        self.cipher.IV = IV
-        return f
-        
-    def setUp(self):
-        from Crypto.Cipher import DES
-        self.cipher = DES.new('abcdefgh',DES.MODE_CBC,"12345678")
-        super(Test_EncryptFB,self).setUp()
-
-
-class Test_Decrypt(filelike.Test_ReadWriteSeek):
-    """Testcases for the Decrypt wrapper class"""
-    
-    ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
-    contents = "Guido van Rossum is a space alien." + "\0"*6
-
-    def makeFile(self,contents,mode):
-        if len(contents) % self.cipher.block_size != 0:
-            raise ValueError("content must be multiple of blocksize.")
-        f = Decrypt(StringIO(self.cipher.encrypt(contents)),self.cipher,mode=mode)
-        return f
-        
-    def setUp(self):
-        from Crypto.Cipher import DES
-        self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
-        super(Test_Decrypt,self).setUp()
-
-
-class Test_DecryptFB(filelike.Test_ReadWriteSeek):
-    """Testcases for the Decrypt wrapper class, using a feedback cipher"""
-    
-    ciphertext = "\xc9\xa3b\x18\xeb\xe8\xbe3\x84\x9a,\x025\x13\xb0\xb7It\x90@a\xb1\xc2\x13\x04_6c\x19\x0b\xf2\xcd\x0eD\xfb?\xf5\xbb\xad\xc8"
-    contents = "Guido van Rossum is a space alien." + "\0"*6
-
-    def makeFile(self,contents,mode):
-        IV = self.cipher.IV
-        if len(contents) % self.cipher.block_size != 0:
-            raise ValueError("content must be multiple of blocksize.")
-        f = Decrypt(StringIO(self.cipher.encrypt(contents)),self.cipher,mode=mode)
-        self.cipher.IV = IV
-        return f
-        
-    def setUp(self):
-        from Crypto.Cipher import DES
-        self.cipher = DES.new('abcdefgh',DES.MODE_CBC,"12345678")
-        super(Test_DecryptFB,self).setUp()
-
-def makefile():
-    from Crypto.Cipher import DES
-    cipher = DES.new('abcdefgh',DES.MODE_CBC,"12345678")
-    return Decrypt(StringIO("\xc9\xa3b\x18\xeb\xe8\xbe3\x84\x9a,\x025\x13\xb0\xb7It\x90@a\xb1\xc2\x13\x04_6c\x19\x0b\xf2\xcd\x0eD\xfb?\xf5\xbb\xad\xc8"),cipher,mode="r+")
-    
-    
-
-def testsuite():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_Encrypt))
-    suite.addTest(unittest.makeSuite(Test_EncryptFB))
-    suite.addTest(unittest.makeSuite(Test_Decrypt))
-    suite.addTest(unittest.makeSuite(Test_DecryptFB))
-    return suite
 

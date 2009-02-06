@@ -29,9 +29,6 @@ portion of a file for reading and writing.
 import filelike
 from filelike.wrappers import FileWrapper
 
-import unittest
-from StringIO import StringIO
-
 
 class Slice(FileWrapper):
     """Class for reading/writing only a portion of a file.
@@ -149,71 +146,3 @@ class Slice(FileWrapper):
         """Get position of file pointer."""
         return self._fileobj.tell() - self.start
  
-
-class Test_Slice_Whole(filelike.Test_ReadWriteSeek):
-    """Testcases for the Slice wrapper class."""
-
-    def makeFile(self,contents,mode):
-        f = Slice(StringIO(contents))
-        if "a" in mode:
-            f.seek(0,2)
-        return f
-
-class Test_Slice_Start(filelike.Test_ReadWriteSeek):
-    """Testcases for the Slice wrapper class with a start offset."""
-
-    def makeFile(self,contents,mode):
-        f = Slice(StringIO("testing" + contents),7)
-        if "a" in mode:
-            f.seek(0,2)
-        return f
-
-class Test_Slice_StartStop(filelike.Test_ReadWriteSeek):
-    """Testcases for the Slice wrapper class with both start and stop."""
-
-    def makeFile(self,contents,mode):
-        f = Slice(StringIO("testing" + contents + "hello"),7,-5)
-        if "a" in mode:
-            f.seek(0,2)
-        return f
-
-    def test_write_at_end(self):
-        method = super(Test_Slice_StartStop,self).test_write_at_end
-        self.assertRaises(IOError,method)
-
-class Test_Slice_StartStopResize(filelike.Test_ReadWriteSeek):
-    """Testcases for the Slice wraper, with resizable stop."""
-
-    def makeFile(self,contents,mode):
-        f = Slice(StringIO("testing" + contents + "hello"),7,-5,resizable=True)
-        if "a" in mode:
-            f.seek(0,2)
-        return f
-    
-    def test_resizability(self):
-        """Test that resizing slices works correctly."""
-        #  By default, can't write beyond end of slice.
-        f = Slice(StringIO("mytestdata"),start=2,stop=6)
-        f.write("TE")
-        f.seek(0)
-        self.assertEquals(f.read(),"TEst")
-        self.assertEquals(f._fileobj.getvalue(),"myTEstdata")
-        f.seek(0)
-        self.assertRaises(IOError,f.write,"TESTDATA")
-        self.assertEquals(f._fileobj.getvalue(),"myTESTdata")
-        # Resizability allows data to be overwritten
-        f = Slice(StringIO("mytestdata"),start=2,stop=6,resizable=True)
-        f.write("TESTDA")
-        self.assertEquals(f._fileobj.getvalue(),"myTESTDAta")
-        self.assertEquals(f.stop,8)
-        
-
-
-def testsuite():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_Slice_Whole))
-    suite.addTest(unittest.makeSuite(Test_Slice_Start))
-    suite.addTest(unittest.makeSuite(Test_Slice_StartStop))
-    suite.addTest(unittest.makeSuite(Test_Slice_StartStopResize))
-    return suite
-
