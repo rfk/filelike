@@ -28,7 +28,7 @@ each building other compression wrappers.
 """ 
 
 import filelike
-from filelike.wrappers import FileWrapper, Debug
+from filelike.wrappers import FileWrapper
 from filelike.wrappers.translate import Translate
 from filelike.wrappers.buffered import Buffered
 
@@ -64,7 +64,6 @@ class Decompress(FileWrapper):
             # Operating in a buffer is the only sensible option
             myFileObj = Translate(fileobj,mode=mode,rfunc=self.decompress,wfunc=self.compress)
             myFileObj = Buffered(myFileObj,mode=mode)
-        #myFileObj = Debug(myFileObj,"BZ")
         super(Decompress,self).__init__(myFileObj,mode=mode)
 
     def _read(self,sizehint=-1):

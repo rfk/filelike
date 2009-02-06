@@ -78,6 +78,8 @@ class Buffered(FileWrapper):
                 else:
                     self._fileobj.seek(0,0)
                     self._buffer.seek(0)
+            else:
+                self._buffer.seek(0)
             for chunk in self._buffer_chunks():
                 self._fileobj.write(chunk)
         super(Buffered,self).close()

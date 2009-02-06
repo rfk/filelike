@@ -40,7 +40,7 @@ class Test_FixedBlockSize5(Test_ReadWriteSeek):
         fbsf.flush = newflush
         def getvalue():
             return f.getvalue()
-        bsf.getvalue = getvalue
+        fbsf.getvalue = getvalue
         return fbsf
 
 

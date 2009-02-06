@@ -17,6 +17,7 @@ class Test_Read(unittest.TestCase):
     """Generic file-like testcases for readable files."""
 
     contents = "Once upon a time, in a galaxy far away,\nGuido van Rossum was a space alien."
+    empty_contents = ""
 
     def makeFile(self,contents,mode):
         """This method must create a file of the type to be tested.
@@ -32,10 +33,11 @@ class Test_Read(unittest.TestCase):
         tf = tempfile.NamedTemporaryFile(mode="w")
         f = ProxyObject(open(tf.name,mode))
         tf.write(contents)
-        tf.close()
+        tf.flush()
         def getvalue():
            return open(tf.name,"r").read()
         f.getvalue = getvalue
+        f._tempfile = tf
         return f
 
     def setUp(self):
@@ -72,7 +74,7 @@ class Test_Read(unittest.TestCase):
 
     def test_read_empty_file(self):
         f = self.makeFile("","r")
-        self.assertEquals(f.read(),"")
+        self.assertEquals(f.read(),self.empty_contents)
 
     def test_eof(self):
         self.file.read()
@@ -86,13 +88,14 @@ class Test_ReadWrite(Test_Read):
     def setUp(self):
         self.file = self.makeFile(self.contents,"r+")
 
-#    def test_write(self):
-#        f = self.makeFile("","w")
-#        f.write(self.contents)
-#        self.assertEquals(f.tell(),len(self.contents))
-#        f.flush()
-#        self.assertEquals(f.getvalue(),self.contents)
-#        f.close()
+    def test_write(self):
+        f = self.makeFile("","w")
+        self.assertEquals(f.getvalue(),self.empty_contents)
+        f.write(self.contents)
+        self.assertEquals(f.tell(),len(self.contents))
+        f.flush()
+        self.assertEquals(f.getvalue(),self.contents)
+        f.close()
 
     def test_write_read(self):
         self.file.write("hello")
@@ -172,7 +175,11 @@ class Test_Join(Test_ReadWriteSeek):
         files.append(StringIO(contents[0:5]))
         files.append(StringIO(contents[5:8]))
         files.append(StringIO(contents[8:]))
-        return join(files)
+        f = join(files)
+        def getvalue():
+            return "".join([s.getvalue() for s in files])
+        f.getvalue = getvalue
+        return f
 
 
 class Test_IsTo(unittest.TestCase):

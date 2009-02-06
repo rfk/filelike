@@ -9,6 +9,7 @@ class Test_PadToBlockSize5(Test_ReadWriteSeek):
     """Testcases for PadToBlockSize with blocksize=5."""
 
     contents = "this is some sample textZ"
+    empty_contents = "ZXXXX"
     text_plain = ["Zhis is sample texty"]
     text_padded = ["Zhis is sample textyZXXXX"]
     blocksize = 5
@@ -25,7 +26,8 @@ class Test_PadToBlockSize5(Test_ReadWriteSeek):
         f = PadToBlockSize(s,self.blocksize,mode=mode)
         def getvalue():
             val = s.getvalue() + "Z"
-            val = val + (self.blocksize - (len(val) % self.blocksize))*"X"
+            if len(val) % self.blocksize != 0:
+                val = val + (self.blocksize - (len(val) % self.blocksize))*"X"
             return val
         f.getvalue = getvalue
         return f
@@ -35,11 +37,6 @@ class Test_PadToBlockSize5(Test_ReadWriteSeek):
             f = self.makeFile(padded,"rw")
             self.assert_(len(padded) % self.blocksize == 0)
             self.assertEquals(f._fileobj.getvalue(),plain)
-
-    def test_read_empty_file(self):
-        # The empty file should still yield padding
-        f = self.makeFile("","r")
-        self.assertEquals(f.read(),"Z"+"X"*(f.blocksize-1))
 
     def test_write_zeds(self):
         f = self.makeFile("","w")
@@ -59,6 +56,7 @@ class Test_PadToBlockSize7(Test_PadToBlockSize5):
     """Testcases for PadToBlockSize with blocksize=7."""
 
     contents = "this is som\n sample textZXXX"
+    empty_contents = "ZXXXXXX"
     text_plain = ["Zhis is sample texty"]
     text_padded = ["Zhis is sample textyZ"]
     blocksize = 7
@@ -68,6 +66,7 @@ class Test_PadToBlockSize16(Test_PadToBlockSize5):
     """Testcases for PadToBlockSize with blocksize=16."""
 
     contents = "This is Zome Zample TeZTZXXXXXXX"
+    empty_contents = "ZXXXXXXXXXXXXXXX"
     text_plain = ["short"]
     text_padded = ["shortZXXXXXXXXXX"]
     blocksize = 16
@@ -87,7 +86,7 @@ class Test_UnPadToBlockSize5(Test_ReadWriteSeek):
         f._fileobj = s
         def getvalue():
             val = s.getvalue()
-            idx = s.rfind("Z")
+            idx = val.rfind("Z")
             return val[:idx]
         f.getvalue = getvalue
         return f

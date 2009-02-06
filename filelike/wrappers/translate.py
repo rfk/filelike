@@ -33,7 +33,7 @@ therefore optimise these operations.
 """ 
 
 import filelike
-from filelike.wrappers import FileWrapper, Debug
+from filelike.wrappers import FileWrapper
 
 
 class Translate(FileWrapper):
@@ -67,7 +67,6 @@ class Translate(FileWrapper):
         transformed, and 'rfunc' and 'wfunc' the callable objects that will
         transform the file's contents.
         """
-        #fileobj = Debug(fileobj,"TR")
         super(Translate,self).__init__(fileobj,mode)
         # rfunc must be provided for readable files
         if self._check_mode("r-"):

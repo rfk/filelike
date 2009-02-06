@@ -16,11 +16,12 @@ class Test_Slice_Whole(Test_ReadWriteSeek):
             f.seek(0,2)
         def getvalue():
             val = s.getvalue()
-            if start:
-                val = val[start:]
             if stop:
-                val = val[:stop]
+                val = val[:f.stop]
+            if start:
+                val = val[f.start:]
             return val
+        f.getvalue = getvalue
         return f
 
 
@@ -39,6 +40,10 @@ class Test_Slice_StartStop(Test_Slice_Whole):
         c2 = "testing" + contents + "hello"
         return super(Test_Slice_StartStop,self).makeFile(c2,mode,7,-5)
 
+    def test_write(self):
+        method = super(Test_Slice_StartStop,self).test_write
+        self.assertRaises(IOError,method)
+
     def test_write_at_end(self):
         method = super(Test_Slice_StartStop,self).test_write_at_end
         self.assertRaises(IOError,method)
@@ -46,6 +51,8 @@ class Test_Slice_StartStop(Test_Slice_Whole):
 
 class Test_Slice_StartStopResize(Test_Slice_Whole):
     """Testcases for the Slice wraper, with resizable stop."""
+
+    contents = "a simple test string"
 
     def makeFile(self,contents,mode):
         c2 = "testing" + contents + "hello"
