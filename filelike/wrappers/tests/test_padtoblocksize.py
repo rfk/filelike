@@ -1,11 +1,11 @@
 
 from filelike.wrappers import PadToBlockSize, UnPadToBlockSize
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 
 from StringIO import StringIO
 
 
-class Test_PadToBlockSize5(Test_ReadWriteSeek):
+class Test_PadToBlockSize5(tests.Test_ReadWriteSeek):
     """Testcases for PadToBlockSize with blocksize=5."""
 
     contents = "this is some sample textZ"
@@ -72,7 +72,7 @@ class Test_PadToBlockSize16(Test_PadToBlockSize5):
     blocksize = 16
 
 
-class Test_UnPadToBlockSize5(Test_ReadWriteSeek):
+class Test_UnPadToBlockSize5(tests.Test_ReadWriteSeek):
     """Testcases for UnPadToBlockSize with blocksize=5."""
 
     contents = "this is some sample text"

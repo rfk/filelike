@@ -1,11 +1,22 @@
 
 from filelike.wrappers import Buffered
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 
 import unittest
 from StringIO import StringIO
 
-class Test_Buffered(Test_ReadWriteSeek):
+
+def get_buffered_value(f):
+    if f._check_mode("r"):
+        f._read_rest()
+    pos = f._buffer.tell()
+    f._buffer.seek(0)
+    val = f._buffer.read()
+    f._buffer.seek(pos)
+    return val
+
+
+class Test_Buffered(tests.Test_ReadWriteSeek):
     """Testcases for the Buffered class."""
     
     def makeFile(self,contents,mode):
@@ -14,13 +25,7 @@ class Test_Buffered(Test_ReadWriteSeek):
             s.seek(0,2)
         f = Buffered(s,mode)
         def getvalue():
-            if f._check_mode("r"):
-                f._read_rest()
-            pos = f._buffer.tell()
-            f._buffer.seek(0)
-            val = f._buffer.read()
-            f._buffer.seek(pos)
-            return val
+            return get_buffered_value(f)
         f.getvalue = getvalue
         return f
 
@@ -83,5 +88,4 @@ class Test_Buffered(Test_ReadWriteSeek):
         self.assertEquals(s.getvalue(),"hello")
         f.close()
         self.assertEquals(s.getvalue(),"hellotesting")
-
 

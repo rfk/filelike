@@ -108,7 +108,8 @@ class Translate(FileWrapper):
         if data is not None:
             self._fileobj.write(data)
         super(Translate,self).flush()
-        self.seek(self.tell(),0)
+        if self._check_mode("r") or self._check_mode("w"):
+            self.seek(self.tell(),0)
 
     def _read(self,sizehint=-1):
         if self._read_eof:

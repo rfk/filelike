@@ -1,11 +1,11 @@
 
 from filelike.wrappers import Decrypt, Encrypt
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 import unittest
 from StringIO import StringIO
 
 
-class Test_Encrypt(Test_ReadWriteSeek):
+class Test_Encrypt(tests.Test_ReadWriteSeek):
     """Testcases for the Encrypt wrapper class"""
     
     contents = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
@@ -27,7 +27,7 @@ class Test_Encrypt(Test_ReadWriteSeek):
         super(Test_Encrypt,self).setUp()
 
 
-class Test_EncryptFB(Test_ReadWriteSeek):
+class Test_EncryptFB(tests.Test_ReadWriteSeek):
     """Testcases for the Encrypt wrapper class, using a feedback cipher"""
     
     contents = "\xc9\xa3b\x18\xeb\xe8\xbe3\x84\x9a,\x025\x13\xb0\xb7It\x90@a\xb1\xc2\x13\x04_6c\x19\x0b\xf2\xcd\x0eD\xfb?\xf5\xbb\xad\xc8"
@@ -55,7 +55,7 @@ class Test_EncryptFB(Test_ReadWriteSeek):
         super(Test_EncryptFB,self).setUp()
 
 
-class Test_Decrypt(Test_ReadWriteSeek):
+class Test_Decrypt(tests.Test_ReadWriteSeek):
     """Testcases for the Decrypt wrapper class"""
     
     ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"
@@ -77,7 +77,7 @@ class Test_Decrypt(Test_ReadWriteSeek):
         super(Test_Decrypt,self).setUp()
 
 
-class Test_DecryptFB(Test_ReadWriteSeek):
+class Test_DecryptFB(tests.Test_ReadWriteSeek):
     """Testcases for the Decrypt wrapper class, using a feedback cipher"""
     
     ciphertext = "\xc9\xa3b\x18\xeb\xe8\xbe3\x84\x9a,\x025\x13\xb0\xb7It\x90@a\xb1\xc2\x13\x04_6c\x19\x0b\xf2\xcd\x0eD\xfb?\xf5\xbb\xad\xc8"

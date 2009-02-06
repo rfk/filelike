@@ -1,11 +1,11 @@
  
 import unittest
 from filelike.wrappers import FixedBlockSize
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 
 from StringIO import StringIO
 
-class Test_FixedBlockSize5(Test_ReadWriteSeek):
+class Test_FixedBlockSize5(tests.Test_ReadWriteSeek):
     """Testcases for the FixedBlockSize class, with blocksize 5."""
 
     blocksize = 5

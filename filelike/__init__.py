@@ -592,7 +592,7 @@ class Opener(object):
 
 ##  Create default Opener that uses urllib2.urlopen() and file() as openers
 def _urllib_opener(filename,mode):
-    if mode != "r":
+    if mode not in ("r","r-"):
         return None
     comps = urlparse.urlparse(filename)
     # ensure it's a URL

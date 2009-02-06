@@ -1,12 +1,12 @@
 
 from filelike.wrappers import Slice
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 
 import unittest
 from StringIO import StringIO
  
 
-class Test_Slice_Whole(Test_ReadWriteSeek):
+class Test_Slice_Whole(tests.Test_ReadWriteSeek):
     """Testcases for the Slice wrapper class."""
 
     def makeFile(self,contents,mode,start=0,stop=None,resizable=False):
@@ -42,6 +42,10 @@ class Test_Slice_StartStop(Test_Slice_Whole):
 
     def test_write(self):
         method = super(Test_Slice_StartStop,self).test_write
+        self.assertRaises(IOError,method)
+
+    def test_write_stream(self):
+        method = super(Test_Slice_StartStop,self).test_write_stream
         self.assertRaises(IOError,method)
 
     def test_write_at_end(self):

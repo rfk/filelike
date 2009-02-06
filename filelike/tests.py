@@ -73,7 +73,7 @@ class Test_Read(unittest.TestCase):
         self.assertEquals(cs,self.contents.split("\n"))
 
     def test_read_empty_file(self):
-        f = self.makeFile("","r")
+        f = self.makeFile(self.empty_contents,"r")
         self.assertEquals(f.read(),self.empty_contents)
 
     def test_eof(self):
@@ -89,13 +89,20 @@ class Test_ReadWrite(Test_Read):
         self.file = self.makeFile(self.contents,"r+")
 
     def test_write(self):
-        f = self.makeFile("","w")
-        self.assertEquals(f.getvalue(),self.empty_contents)
+        f = self.makeFile(self.empty_contents,"w")
         f.write(self.contents)
         self.assertEquals(f.tell(),len(self.contents))
         f.flush()
         self.assertEquals(f.getvalue(),self.contents)
         f.close()
+
+    def test_write_stream(self):
+        f = self.makeFile("","w-")
+        self.assertEquals(f.getvalue(),self.empty_contents)
+        f.write(self.contents)
+        self.assertEquals(f.tell(),len(self.contents))
+        f.flush()
+        self.assertEquals(f.getvalue(),self.contents)
 
     def test_write_read(self):
         self.file.write("hello")

@@ -1,6 +1,7 @@
 
-from filelike.wrappers import BZip2, UnBZip2
-from filelike.tests import Test_ReadWriteSeek
+from filelike.wrappers import BZip2, UnBZip2, Buffered
+from filelike import tests
+from filelike.wrappers.tests.test_buffered import get_buffered_value
 
 import unittest
 from StringIO import StringIO
@@ -8,16 +9,21 @@ from StringIO import StringIO
 import bz2
 
 
-class Test_BZip2(Test_ReadWriteSeek):
+class Test_BZip2(tests.Test_ReadWriteSeek):
     """Tetcases for BZip2 wrapper class."""
 
     contents = bz2.compress("This is my compressed\n test data")
+    empty_contents = bz2.compress("")
 
     def makeFile(self,contents,mode):
         s = StringIO(bz2.decompress(contents))
         f = BZip2(s,mode)
-        def getvalue():
-            return bz2.compress(s.getvalue())
+        if isinstance(f._fileobj,Buffered):
+            def getvalue():
+                return get_buffered_value(f._fileobj)
+        else:
+            def getvalue():
+                return bz2.compress(s.getvalue())
         f.getvalue = getvalue
         return f
 
@@ -44,11 +50,6 @@ class Test_BZip2(Test_ReadWriteSeek):
         c = self.file.read(10)
         self.assertEquals(c,self.contents[:10])
 
-    def test_read_empty_file(self):
-        f = BZip2(StringIO(""),"r")
-        self.assertEquals(f.read(),bz2.compress(""))
-        f.close()
-
     def test_resulting_file(self):
         """Make sure BZip2 changes are pushed through to actual file."""
         import tempfile
@@ -68,7 +69,7 @@ class Test_BZip2(Test_ReadWriteSeek):
             os.unlink(fn)
 
 
-class Test_UnBZip2(Test_ReadWriteSeek):
+class Test_UnBZip2(tests.Test_ReadWriteSeek):
     """Tetcases for UnBZip2 wrapper class."""
 
     contents = "This is my uncompressed\n test data"
@@ -76,8 +77,12 @@ class Test_UnBZip2(Test_ReadWriteSeek):
     def makeFile(self,contents,mode):
         s = StringIO(bz2.compress(contents))
         f = UnBZip2(s,mode)
-        def getvalue():
-            return bz2.decompress(s.getvalue())
+        if isinstance(f._fileobj,Buffered):
+            def getvalue():
+                return get_buffered_value(f._fileobj)
+        else:
+            def getvalue():
+                return bz2.decompress(s.getvalue())
         f.getvalue = getvalue
         return f
 

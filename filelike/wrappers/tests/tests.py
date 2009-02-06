@@ -1,6 +1,6 @@
 
 from filelike.wrappers import *
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 
 import os
 import tempfile
@@ -8,7 +8,7 @@ import unittest
 from StringIO import StringIO
 
 
-class Test_FileWrapper(Test_ReadWriteSeek):
+class Test_FileWrapper(tests.Test_ReadWriteSeek):
     """Testcases for FileWrapper base class."""
     
     def makeFile(self,contents,mode):
@@ -41,6 +41,6 @@ class Test_OpenerDecoders(unittest.TestCase):
     
     def test_RemoteBzFile(self):
         """Test opening a remote BZ2 file."""
-        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2")
+        f = filelike.open("http://www.rfk.id.au/static/test.txt.bz2","r-")
         self.assertEquals(f.read(),"contents goes here if you please.\n\n")
 

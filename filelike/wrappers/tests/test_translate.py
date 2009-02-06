@@ -1,12 +1,12 @@
 
 from filelike.wrappers import Translate, BytewiseTranslate
-from filelike.tests import Test_ReadWriteSeek
+from filelike import tests
 
 import unittest
 from StringIO import StringIO
 
 
-class Test_Translate(Test_ReadWriteSeek):
+class Test_Translate(tests.Test_ReadWriteSeek):
     """Testcases for the Translate class, with null translation func."""
     
     def makeFile(self,contents,mode):
@@ -20,7 +20,7 @@ class Test_Translate(Test_ReadWriteSeek):
         return f
 
 
-class Test_BytewiseTranslate(Test_ReadWriteSeek):
+class Test_BytewiseTranslate(tests.Test_ReadWriteSeek):
     """Testcases for the BytewiseTranslate class."""
     
     def makeFile(self,contents,mode):
