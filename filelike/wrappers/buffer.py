@@ -160,7 +160,6 @@ class FlushableBuffer(Buffer):
             self._start_pos = self._fileobj.tell()
 
     def flush(self):
-        print "FLUSHING"
         pos = self._buffer.tell()
         self._write_out_buffer()
         self._buffer.seek(pos)
@@ -182,7 +181,6 @@ class FlushableBuffer(Buffer):
                 self._buffer.seek(self._in_pos)
                 self._fileobj.seek(self._in_pos)
             else:
-                print "HERE"
                 self._fileobj.seek(0)
                 self._buffer.seek(0)
         else:

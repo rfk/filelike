@@ -88,9 +88,7 @@ class Test_UnBZip2(tests.Test_ReadWrite):
             f.write("Ausralia!")
             f.seek(-6,1)
             f.write("tralia!")
-            print get_buffered_value(f._fileobj)
             f.close()
-            print repr(bz2.decompress("".join(open(fn))))
             self.assertEquals(open(fn).read(),bz2.compress("hello Australia!"))
         finally:
           os.unlink(fn)

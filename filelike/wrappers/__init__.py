@@ -110,7 +110,7 @@ class FileWrapper(FileLikeBase):
                 self._fileobj.seek(0)
             self.seek(0,2)
         # This is used for working around flush/close inefficiencies
-        self.__closing = False
+        self._closing = False
 
     def _validate_mode(self):
         """Check that various file-mode conditions are satisfied."""
@@ -128,7 +128,7 @@ class FileWrapper(FileLikeBase):
         #  close() on it, which will call its flush() again!  To avoid
         #  this inefficiency, our flush() will not flush the wrapped
         #  fileobj when we're closing.
-        self.__closing = True
+        self._closing = True
         super(FileWrapper,self).close()
         if hasattr(self._fileobj,"close"):
             self._fileobj.close()
@@ -136,7 +136,7 @@ class FileWrapper(FileLikeBase):
     def flush(self):
         """Flush the write buffers of the file."""
         super(FileWrapper,self).flush()
-        if not self.__closing and hasattr(self._fileobj,"flush"):
+        if not self._closing and hasattr(self._fileobj,"flush"):
             self._fileobj.flush()
     
     def _read(self,sizehint=-1):
