@@ -1,6 +1,6 @@
 
 from filelike.wrappers import Translate, BytewiseTranslate
-from filelike import tests
+from filelike import tests, NotSeekableError
 
 import unittest
 from StringIO import StringIO
@@ -18,6 +18,10 @@ class Test_Translate(tests.Test_ReadWriteSeek):
             return s.getvalue()
         f.getvalue = getvalue
         return f
+
+    def test_write_twice(self):
+        method = super(Test_Translate,self).test_write_twice
+        self.assertRaises(NotSeekableError,method)
 
 
 class Test_BytewiseTranslate(tests.Test_ReadWriteSeek):

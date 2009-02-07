@@ -102,6 +102,7 @@ class Test_ReadWrite(Test_Read):
         self.assertEquals(f.tell(),len(self.contents))
         f.flush()
         self.assertEquals(f.getvalue(),self.contents)
+        f.close()
 
     def test_write_read(self):
         self.file.write("hello")

@@ -113,6 +113,11 @@ class Translate(FileWrapper):
         super(Translate,self).flush()
         if "-" not in self.mode:
             self.seek(self.tell())
+        else:
+            if hasattr(self._rfunc,"reset"):
+                self._rfunc.reset()
+            if hasattr(self._wfunc,"reset"):
+                self._wfunc.reset()
 
     def _read(self,sizehint=-1):
         if self._read_eof:

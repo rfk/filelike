@@ -63,7 +63,7 @@ class Test_BZip2(tests.Test_ReadWriteSeek):
             os.unlink(fn)
 
 
-class Test_UnBZip2(tests.Test_ReadWriteSeek):
+class Test_UnBZip2(tests.Test_ReadWrite):
     """Tetcases for UnBZip2 wrapper class."""
 
     contents = "This is my uncompressed\n test data"

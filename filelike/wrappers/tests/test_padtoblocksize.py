@@ -1,6 +1,6 @@
 
 from filelike.wrappers import PadToBlockSize, UnPadToBlockSize
-from filelike import tests
+from filelike import tests, NotSeekableError
 
 from StringIO import StringIO
 
@@ -50,6 +50,10 @@ class Test_PadToBlockSize5(tests.Test_ReadWriteSeek):
 
     def test_write_at_end(self):
         pass
+
+    def test_write_twice(self):
+        method = super(Test_PadToBlockSize5,self).test_write_twice
+        self.assertRaises(NotSeekableError,method)
 
 
 class Test_PadToBlockSize7(Test_PadToBlockSize5):
@@ -110,6 +114,10 @@ class Test_UnPadToBlockSize5(tests.Test_ReadWriteSeek):
         txt = "test data Z with lots of Z's embedded in it Z"
         f._fileobj = StringIO(txt + f._padding(txt))
         self.assertEquals(f.read(),txt)
+
+    def test_write_twice(self):
+        method = super(Test_UnPadToBlockSize5,self).test_write_twice
+        self.assertRaises(NotSeekableError,method)
 
 
 class Test_UnPadToBlockSize7(Test_UnPadToBlockSize5):
