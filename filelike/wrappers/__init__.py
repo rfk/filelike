@@ -81,6 +81,8 @@ class FileWrapper(FileLikeBase):
     will probably want to override these.
     """
 
+    _append_requires_overwrite = False
+
     def __init__(self,fileobj,mode=None):
         """FileWrapper constructor.
         
@@ -95,16 +97,25 @@ class FileWrapper(FileLikeBase):
         super(FileWrapper,self).__init__()
         self._fileobj = fileobj
         if mode is None:
-            if hasattr(fileobj,"mode"):
-                self.mode = fileobj.mode
+            self.mode = getattr(fileobj,"mode","r+")
         else:
             self.mode = mode
+        self._validate_mode()
         # Copy useful attributes of the fileobj
         if hasattr(fileobj,"name"):
             self.name = fileobj.name
         # Respect append-mode setting
         if hasattr(self,"mode") and "a" in self.mode:
             self.seek(0,2)
+
+    def _validate_mode(self):
+        """Check that various file-mode conditions are satisfied."""
+        #  If append mode requires overwriting the underlying file,
+        #  if must not be opened in append mode.
+        if self._append_requires_overwrite:
+            if self._check_mode("w"):
+                if "a" in getattr(self._fileobj,"mode",""):
+                    raise ValueError("Underlying file can't be in append mode")
         
     def close(self):
         """Close the object for reading/writing."""

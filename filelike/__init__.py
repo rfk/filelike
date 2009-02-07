@@ -102,6 +102,14 @@ import urlparse
 import tempfile
 
 
+class NotReadableError(IOError):
+    pass
+class NotWritableError(IOError):
+    pass
+class NotSeekableError(IOError):
+    pass
+
+
 class FileLikeBase(object):
     """Base class for implementing file-like objects.
     
@@ -178,7 +186,7 @@ class FileLikeBase(object):
         'mode' must be one of "r" or "w", and this function returns False
         if the file-like object has a 'mode' attribute, and it does not
         permit access in that mode.  If there is no 'mode' attribute,
-        True is returned.
+        it defaults to "r+".
 
         If seek support is not required, use "r-" or "w-" as the mode string.
 
@@ -189,7 +197,7 @@ class FileLikeBase(object):
             try:
                 mstr = self.mode
             except AttributeError:
-                return True
+                mstr = "r+"
         if "+" in mstr:
             return True
         if "-" in mstr and "-" not in mode:
@@ -212,17 +220,17 @@ class FileLikeBase(object):
             try:
                 mstr = self.mode
             except AttributeError:
-                return True
+                mstr = "r+"
         if "+" in mstr:
             return True
         if "-" in mstr and "-" not in mode:
-            raise IOError("File does not support seeking.")
+            raise NotSeekableError("File does not support seeking.")
         if "r" in mode:
             if "r" not in mstr:
-                raise IOError("File not opened for reading")
+                raise NotReadableError("File not opened for reading")
         if "w" in mode:
             if "w" not in mstr and "a" not in mstr:
-                raise IOError("File not opened for writing")
+                raise NotWritableError("File not opened for writing")
         return True
     
     def flush(self):
@@ -277,8 +285,8 @@ class FileLikeBase(object):
         """Move the internal file pointer to the given location."""
         if whence > 2 or whence < 0:
             raise ValueError("Invalid value for 'whence': " + str(whence))
-        if hasattr(self,"mode") and "-" in self.mode:
-            raise IOError("File is not seekable.")
+        if "-" in getattr(self,"mode",""):
+            raise NotSeekableError("File is not seekable.")
         # Ensure that there's nothing left in the write buffer
         if self._wbuffer:
             self.flush()
@@ -297,31 +305,35 @@ class FileLikeBase(object):
         # Shortcut the special case of staying put
         if offset == 0 and whence == 1:
             return
-        # Try to do a whence-wise seek if it is implemented.
-        sbuf = None
+        # Catch any failed attempts to read while simulating seek
         try:
-            sbuf = self._seek(offset,whence)
-        except NotImplementedError:
-            # Try to simulate using an absolute seek.
+            # Try to do a whence-wise seek if it is implemented.
+            sbuf = None
             try:
-                if whence == 1:
-                    offset = self._tell() + offset
-                elif whence == 2:
-                    if hasattr(self,"size"):
-                        offset = self.size + offset
-                    else:
-                        for ln in self: pass
-                        offset = self.tell() + offset
-                else:
-                    # absolute seek already failed, don't try again
-                    raise NotImplementedError
-                sbuf = self._seek(offset,0)
+                sbuf = self._seek(offset,whence)
             except NotImplementedError:
-                # Simulate by reseting to start
-                self._seek(0,0)
-                self._soffset = offset
-        finally:
-            self._sbuffer = sbuf
+                # Try to simulate using an absolute seek.
+                try:
+                    if whence == 1:
+                        offset = self._tell() + offset
+                    elif whence == 2:
+                        if hasattr(self,"size"):
+                            offset = self.size + offset
+                        else:
+                            for ln in self: pass
+                            offset = self.tell() + offset
+                    else:
+                        # absolute seek already failed, don't try again
+                        raise NotImplementedError
+                    sbuf = self._seek(offset,0)
+                except NotImplementedError:
+                    # Simulate by reseting to start
+                    self._seek(0,0)
+                    self._soffset = offset
+            finally:
+                self._sbuffer = sbuf
+        except NotReadableError:
+            raise NotSeekableError("File not readable, can't simulate seek")
 
     def tell(self):
         """Determine current position of internal file pointer."""
@@ -487,7 +499,7 @@ class FileLikeBase(object):
         until None has been read from _read().  Once EOF is reached, it
         should be safe to call _read() again, immediately returning None.
         """
-        raise IOError("Object not readable")
+        raise NotReadableError("Object not readable")
     
     def _write(self,string,flushing=False):
         """Write the given string to the file-like object.
@@ -503,7 +515,7 @@ class FileLikeBase(object):
         is expected to be written to the file. If unwritten data is returned
         when 'flushing' is true, an IOError will be raised.
         """
-        raise IOError("Object not writable")
+        raise NotWritableError("Object not writable")
 
     def _seek(self,offset,whence):
         """Set the file's internal position pointer, approximately.
@@ -520,7 +532,7 @@ class FileLikeBase(object):
         NotImplementedError to have them simulated (inefficiently) by
         the higher-level mahinery of this class.
         """
-        raise IOError("Object not seekable")
+        raise NotSeekableError("Object not seekable")
 
     def _tell(self):
         """Get the location of the file's internal position pointer.
@@ -533,7 +545,7 @@ class FileLikeBase(object):
         (the "apparent position") may be different to the position
         returned by this method (the "actual position").
         """
-        raise IOError("Object not seekable")
+        raise NotSeekableError("Object not seekable")
 
 
 class Opener(object):

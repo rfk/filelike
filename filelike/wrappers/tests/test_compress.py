@@ -1,7 +1,7 @@
 
 from filelike.wrappers import BZip2, UnBZip2, Buffered
 from filelike import tests
-from filelike.wrappers.tests.test_buffered import get_buffered_value
+from filelike.wrappers.tests.test_buffered import def_getvalue_maybe_buffered
 
 import unittest
 from StringIO import StringIO
@@ -18,13 +18,7 @@ class Test_BZip2(tests.Test_ReadWriteSeek):
     def makeFile(self,contents,mode):
         s = StringIO(bz2.decompress(contents))
         f = BZip2(s,mode)
-        if isinstance(f._fileobj,Buffered):
-            def getvalue():
-                return get_buffered_value(f._fileobj)
-        else:
-            def getvalue():
-                return bz2.compress(s.getvalue())
-        f.getvalue = getvalue
+        f.getvalue = def_getvalue_maybe_buffered(f,s,bz2.compress)
         return f
 
     #  We can't just write arbitrary text into a BZip stream, so we have
@@ -77,13 +71,7 @@ class Test_UnBZip2(tests.Test_ReadWriteSeek):
     def makeFile(self,contents,mode):
         s = StringIO(bz2.compress(contents))
         f = UnBZip2(s,mode)
-        if isinstance(f._fileobj,Buffered):
-            def getvalue():
-                return get_buffered_value(f._fileobj)
-        else:
-            def getvalue():
-                return bz2.decompress(s.getvalue())
-        f.getvalue = getvalue
+        f.getvalue = def_getvalue_maybe_buffered(f,s,bz2.decompress)
         return f
 
     def test_resulting_file(self):

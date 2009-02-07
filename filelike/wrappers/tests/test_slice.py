@@ -50,6 +50,10 @@ class Test_Slice_StartStop(Test_Slice_Whole):
         method = super(Test_Slice_StartStop,self).test_write_at_end
         self.assertRaises(IOError,method)
 
+    def test_write_twice(self):
+        method = super(Test_Slice_StartStop,self).test_write_twice
+        self.assertRaises(IOError,method)
+
 
 class Test_Slice_StartStopResize(Test_Slice_Whole):
     """Testcases for the Slice wraper, with resizable stop."""

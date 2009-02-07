@@ -169,6 +169,8 @@ class UnPadToBlockSize(FileWrapper):
     removing extraneous padding data when reading, and adding it back in
     when writing.
     """
+
+    _append_requires_overwrite = True
     
     def __init__(self,fileobj,blocksize,mode=None):
         super(UnPadToBlockSize,self).__init__(fileobj,mode)

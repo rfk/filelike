@@ -59,6 +59,8 @@ class Translate(FileWrapper):
     class instead; the efficiency of several operations can be improved
     dramatically given such properties of the translation function.
     """
+
+    _append_requires_overwrite = True
     
     def __init__(self,fileobj,rfunc=None,wfunc=None,mode=None):
         """Translate file wrapper constructor.
@@ -69,15 +71,6 @@ class Translate(FileWrapper):
         """
         #fileobj = Debug(fileobj,"TRN")
         super(Translate,self).__init__(fileobj,mode)
-        # If we're writable, the underlying file cannot be in append mode.
-        # If it were, we wouldn't be able to re-write the head of the stream.
-        if self._check_mode("w"):
-            if hasattr(fileobj,"mode") and "a" in fileobj.mode:
-                raise ValueError("Translated stream musnt't be opened in append mode.")
-        # To be seekable, we must be readable
-        if self._check_mode("w") and not self._check_mode("w-"):
-            if not self._check_mode("r"):
-                raise ValueError("To be seekable, Translate() instances must be readable.")
         # rfunc must be provided for readable files
         if self._check_mode("r-"):
             if rfunc is None:
@@ -118,8 +111,8 @@ class Translate(FileWrapper):
         if data is not None:
             self._fileobj.write(data)
         super(Translate,self).flush()
-        if self._check_mode("r") or self._check_mode("w"):
-            self.seek(self.tell(),0)
+        if "-" not in self.mode:
+            self.seek(self.tell())
 
     def _read(self,sizehint=-1):
         if self._read_eof:

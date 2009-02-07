@@ -65,6 +65,9 @@ class Decrypt(FileWrapper):
                                                   rfunc=cipher.decrypt,
                                                   wfunc=cipher.encrypt)
             myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
+            if self._check_mode("w",mode) and "-" not in mode:
+                if not self._check_mode("r",mode):
+                    myFileObj = Buffered(myFileObj,mode=mode)
         else:
             # Other modes are stateful translations.
             # To reset them, we simply reset the initialisation vector
@@ -88,7 +91,7 @@ class Decrypt(FileWrapper):
                     mode = "r+"
             if self._check_mode("rw",mode):
                 myFileObj = Buffered(myFileObj,mode=mode)
-            elif self._check_mode("w",mode) and not self._check_mode("w-",mode):
+            elif self._check_mode("w",mode) and "-" not in mode:
                 myFileObj = Buffered(myFileObj,mode=mode)
         super(Decrypt,self).__init__(myFileObj,mode=mode)
 
@@ -150,7 +153,7 @@ class Encrypt(FileWrapper):
                     mode = "r+"
             if self._check_mode("rw",mode):
                 myFileObj = Buffered(myFileObj,mode=mode)
-            elif self._check_mode("w",mode) and not self._check_mode("w-",mode):
+            elif self._check_mode("w",mode) and "-" not in mode:
                 myFileObj = Buffered(myFileObj,mode=mode)
         super(Encrypt,self).__init__(myFileObj,mode=mode)
 

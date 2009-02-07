@@ -9,7 +9,6 @@ class Test_Pipeline(unittest.TestCase):
     
     def setUp(self):
         from Crypto.Cipher import DES
-        # Example inspired by the PyCrypto manual
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
         self.plaintext = "Guido van Rossum is a space alien." + "\0"*6
         self.ciphertext = "\x11,\xe3Nq\x8cDY\xdfT\xe2pA\xfa\xad\xc9s\x88\xf3,\xc0j\xd8\xa8\xca\xe7\xe2I\xd15w\x1d\xfe\x92\xd7\xca\xc9\xb5r\xec"

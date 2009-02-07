@@ -159,6 +159,17 @@ class Test_ReadWriteSeek(Test_ReadWrite):
         self.file.seek(0,0)
         self.assertEquals(self.file.read(),self.contents+"testable")
 
+    def test_write_twice(self):
+        f = self.makeFile(self.empty_contents,"w")
+        f.write(self.contents)
+        self.assertEquals(f.tell(),len(self.contents))
+        f.flush()
+        self.assertEquals(f.getvalue(),self.contents)
+        f.seek(-5,2)
+        f.write(self.contents[-5:])
+        f.flush()
+        self.assertEquals(f.getvalue(),self.contents)
+
 
 class Test_StringIO(Test_ReadWriteSeek):
     """Run our testcases against StringIO, basically to test the tests."""

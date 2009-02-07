@@ -1,6 +1,7 @@
 
-from filelike.wrappers import Decrypt, Encrypt
+from filelike.wrappers import Decrypt, Encrypt, Buffered
 from filelike import tests
+from filelike.wrappers.tests.test_buffered import def_getvalue_maybe_buffered
 import unittest
 from StringIO import StringIO
 
@@ -16,9 +17,7 @@ class Test_Encrypt(tests.Test_ReadWriteSeek):
             raise ValueError("content must be multiple of blocksize.")
         s = StringIO(self.cipher.decrypt(contents))
         f = Encrypt(s,self.cipher,mode=mode)
-        def getvalue():
-            return self.cipher.encrypt(s.getvalue())
-        f.getvalue = getvalue
+        f.getvalue = def_getvalue_maybe_buffered(f,s,self.cipher.encrypt)
         return f
         
     def setUp(self):
@@ -40,13 +39,13 @@ class Test_EncryptFB(tests.Test_ReadWriteSeek):
         s = StringIO(self.cipher.decrypt(contents))
         self.cipher.IV = IV
         f = Encrypt(s,self.cipher,mode=mode)
-        def getvalue():
+        def trans(val):
             IV = self.cipher.IV
             self.cipher.IV = "12345678"
-            val = self.cipher.encrypt(s.getvalue())
+            val = self.cipher.encrypt(val)
             self.cipher.IV = IV
             return val
-        f.getvalue = getvalue
+        f.getvalue = def_getvalue_maybe_buffered(f,s,trans)
         return f
         
     def setUp(self):
@@ -66,9 +65,7 @@ class Test_Decrypt(tests.Test_ReadWriteSeek):
             raise ValueError("content must be multiple of blocksize.")
         s = StringIO(self.cipher.encrypt(contents))
         f = Decrypt(s,self.cipher,mode=mode)
-        def getvalue():
-            return self.cipher.decrypt(s.getvalue())
-        f.getvalue = getvalue
+        f.getvalue = def_getvalue_maybe_buffered(f,s,self.cipher.decrypt)
         return f
         
     def setUp(self):
@@ -90,13 +87,13 @@ class Test_DecryptFB(tests.Test_ReadWriteSeek):
         s = StringIO(self.cipher.encrypt(contents))
         self.cipher.IV = IV
         f = Decrypt(s,self.cipher,mode=mode)
-        def getvalue():
+        def trans(val):
             IV = self.cipher.IV
             self.cipher.IV = "12345678"
-            val = self.cipher.decrypt(s.getvalue())
+            val = self.cipher.decrypt(val)
             self.cipher.IV = IV
             return val
-        f.getvalue = getvalue
+        f.getvalue = def_getvalue_maybe_buffered(f,s,trans)
         return f
         
     def setUp(self):

@@ -16,6 +16,24 @@ def get_buffered_value(f):
     return val
 
 
+def def_getvalue_maybe_buffered(f,s,trans_s=None,trans_b=None):
+    if isinstance(f._fileobj,Buffered):
+        if trans_b:
+            def getvalue():
+                return trans_b(get_buffered_value(f._fileobj))
+        else:
+            def getvalue():
+                return get_buffered_value(f._fileobj)
+    else:
+        if trans_s:
+            def getvalue():
+                return trans_s(s.getvalue())
+        else:
+            def getvalue():
+                return s.getvalue()
+    return getvalue
+
+
 class Test_Buffered(tests.Test_ReadWriteSeek):
     """Testcases for the Buffered class."""
     
