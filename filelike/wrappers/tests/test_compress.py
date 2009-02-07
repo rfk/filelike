@@ -1,7 +1,7 @@
 
-from filelike.wrappers import BZip2, UnBZip2, Buffered
+from filelike.wrappers import BZip2, UnBZip2
 from filelike import tests
-from filelike.wrappers.tests.test_buffered import def_getvalue_maybe_buffered
+from filelike.wrappers.tests.test_buffer import get_buffered_value, def_getvalue_maybe_buffered
 
 import unittest
 from StringIO import StringIO
@@ -88,7 +88,9 @@ class Test_UnBZip2(tests.Test_ReadWriteSeek):
             f.write("Ausralia!")
             f.seek(-6,1)
             f.write("tralia!")
+            print get_buffered_value(f._fileobj)
             f.close()
+            print repr(bz2.decompress("".join(open(fn))))
             self.assertEquals(open(fn).read(),bz2.compress("hello Australia!"))
         finally:
           os.unlink(fn)

@@ -1,4 +1,4 @@
-# filelike/wrappers/buffered.py
+# filelike/wrappers/buffer.py
 #
 # Copyright (C) 2009, Ryan Kelly
 #
@@ -19,13 +19,16 @@
 #
 """
 
-    filelike.wrappers.buffered:  buffering of streams to create a file
+    filelike.wrappers.buffer:  buffering of streams to create a file
     
-This module provides the filelike wrapper 'Buffered', which routes reads
+This module provides the filelike wrapper 'Buffer', which routes reads
 and writes through a separate buffer file.  This allows the full file-like
 interface to be provided, including seek() and tell(), while guaranteeing
 that the underlying file is treated like a stream, with only read() and
 write() being called.
+
+The subclass 'FlushableBuffer' additionally assumes that the underlying
+stream can be reset back to position zero, allowing flushes to be performed.
 
 """ 
 
@@ -38,7 +41,7 @@ except ImportError:
     from tempfile import TemporaryFile
 
 
-class Buffered(FileWrapper):
+class Buffer(FileWrapper):
     """Class implementing buffereing of input and output streams.
     
     This class uses a separate buffer file to hold the contents of the
@@ -52,35 +55,39 @@ class Buffered(FileWrapper):
         self._buffer = TemporaryFile()
         self._in_eof = False
         self._in_pos = 0
-        super(Buffered,self).__init__(fileobj,mode)
-
-    def flush(self):
-        # flush the buffer; we only write to the underlying file on close
-        self._buffer.flush()
+        super(Buffer,self).__init__(fileobj,mode)
 
     def _buffer_chunks(self):
         chunk = self._buffer.read(16*1024)
         while chunk != "":
             yield chunk
             chunk = self._buffer.read(16*1024)
+
+    def _write_out_buffer(self):
+        if self._check_mode("r"):
+            if not self._in_eof:
+                self._read_rest()
+            if "a" in self.mode:
+                self._buffer.seek(self._in_pos)
+                self._fileobj.seek(self._in_pos)
+            else:
+                self._fileobj.seek(0)
+                self._buffer.seek(0)
+        else:
+            self._buffer.seek(0)
+        for chunk in self._buffer_chunks():
+            self._fileobj.write(chunk)
  
+    def flush(self):
+        # flush the buffer; we only write to the underlying file on close
+        self._buffer.flush()
+
     def close(self):
         if self.closed:
             return
         if self._check_mode("w"):
-            if self._check_mode("r"):
-                if not self._in_eof:
-                    self._read_rest()
-                if "a" in self.mode:
-                    self._buffer.seek(self._in_pos)
-                else:
-                    self._fileobj.seek(0,0)
-                    self._buffer.seek(0)
-            else:
-                self._buffer.seek(0)
-            for chunk in self._buffer_chunks():
-                self._fileobj.write(chunk)
-        super(Buffered,self).close()
+            self._write_out_buffer()
+        super(Buffer,self).close()
 
     def _read(self,sizehint=-1):
         #  First return any data available from the buffer
@@ -135,5 +142,56 @@ class Buffered(FileWrapper):
             data = self._fileobj.read(self._bufsize)
         self._in_eof = True 
         self._buffer.seek(pos)
+
+
+class FlushableBuffer(Buffer):
+    """Buffered file wrapper that supports flusing.
+
+    This subclass of Buffer assumes that the underlying file object can
+    be reset the position 0, allowing calls to flush() to write out to
+    the underlying file.
+    """
+
+    _append_requires_overwite = True
+
+    def __init__(self,fileobj,mode=None):
+        super(FlushableBuffer,self).__init__(fileobj,mode)
+        if "a" in self.mode and not self._check_mode("r"):
+            self._start_pos = self._fileobj.tell()
+
+    def flush(self):
+        print "FLUSHING"
+        pos = self._buffer.tell()
+        self._write_out_buffer()
+        self._buffer.seek(pos)
+        # Skip Buffer.flush, as it doesn't call parent class methods
+        super(Buffer,self).flush()
+
+    def close(self):
+        if self.closed:
+            return
+        # Don't call Buffer.close, it will call _write_out_buffer, but
+        # that's done by the implicit flush() in this case.
+        super(Buffer,self).close()
+
+    def _write_out_buffer(self):
+        if self._check_mode("r"):
+            if not self._in_eof:
+                self._read_rest()
+            if "a" in self.mode:
+                self._buffer.seek(self._in_pos)
+                self._fileobj.seek(self._in_pos)
+            else:
+                print "HERE"
+                self._fileobj.seek(0)
+                self._buffer.seek(0)
+        else:
+            if "a" in self.mode:
+                self._fileobj.seek(self._start_pos)
+            else:
+                self._fileobj.seek(0)
+            self._buffer.seek(0)
+        for chunk in self._buffer_chunks():
+            self._fileobj.write(chunk)
 
 

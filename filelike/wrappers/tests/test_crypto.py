@@ -1,7 +1,7 @@
 
-from filelike.wrappers import Decrypt, Encrypt, Buffered
+from filelike.wrappers import Decrypt, Encrypt
 from filelike import tests
-from filelike.wrappers.tests.test_buffered import def_getvalue_maybe_buffered
+from filelike.wrappers.tests.test_buffer import def_getvalue_maybe_buffered
 import unittest
 from StringIO import StringIO
 

@@ -28,7 +28,7 @@ dealing with encrypted files.
 import filelike
 from filelike.wrappers import FileWrapper
 from filelike.wrappers.translate import Translate, BytewiseTranslate
-from filelike.wrappers.buffered import Buffered
+from filelike.wrappers.buffer import FlushableBuffer
 from filelike.wrappers.fixedblocksize import FixedBlockSize
 
 
@@ -67,7 +67,7 @@ class Decrypt(FileWrapper):
             myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
             if self._check_mode("w",mode) and "-" not in mode:
                 if not self._check_mode("r",mode):
-                    myFileObj = Buffered(myFileObj,mode=mode)
+                    myFileObj = FlushableBuffer(myFileObj,mode=mode)
         else:
             # Other modes are stateful translations.
             # To reset them, we simply reset the initialisation vector
@@ -90,9 +90,9 @@ class Decrypt(FileWrapper):
                 except AttributeError:
                     mode = "r+"
             if self._check_mode("rw",mode):
-                myFileObj = Buffered(myFileObj,mode=mode)
+                myFileObj = FlushableBuffer(myFileObj,mode=mode)
             elif self._check_mode("w",mode) and "-" not in mode:
-                myFileObj = Buffered(myFileObj,mode=mode)
+                myFileObj = FlushableBuffer(myFileObj,mode=mode)
         super(Decrypt,self).__init__(myFileObj,mode=mode)
 
 
@@ -130,6 +130,9 @@ class Encrypt(FileWrapper):
                                                   rfunc=cipher.encrypt,
                                                   wfunc=cipher.decrypt)
             myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
+            if self._check_mode("w",mode) and "-" not in mode:
+                if not self._check_mode("r",mode):
+                    myFileObj = FlushableBuffer(myFileObj,mode=mode)
         else:
             # Other modes are stateful translations.
             # To reset them, we simply reset the initialisation vector
@@ -152,8 +155,8 @@ class Encrypt(FileWrapper):
                 except AttributeError:
                     mode = "r+"
             if self._check_mode("rw",mode):
-                myFileObj = Buffered(myFileObj,mode=mode)
+                myFileObj = FlushableBuffer(myFileObj,mode=mode)
             elif self._check_mode("w",mode) and "-" not in mode:
-                myFileObj = Buffered(myFileObj,mode=mode)
+                myFileObj = FlushableBuffer(myFileObj,mode=mode)
         super(Encrypt,self).__init__(myFileObj,mode=mode)
 

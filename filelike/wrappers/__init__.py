@@ -105,8 +105,12 @@ class FileWrapper(FileLikeBase):
         if hasattr(fileobj,"name"):
             self.name = fileobj.name
         # Respect append-mode setting
-        if hasattr(self,"mode") and "a" in self.mode:
+        if "a" in self.mode:
+            if self._check_mode("r"):
+                self._fileobj.seek(0)
             self.seek(0,2)
+        # This is used for working around flush/close inefficiencies
+        self.__closing = False
 
     def _validate_mode(self):
         """Check that various file-mode conditions are satisfied."""
@@ -119,6 +123,12 @@ class FileWrapper(FileLikeBase):
         
     def close(self):
         """Close the object for reading/writing."""
+        #  The superclass implementation of this will call flush(),
+        #  which calls flush() on our wrapped object.  But we then call
+        #  close() on it, which will call its flush() again!  To avoid
+        #  this inefficiency, our flush() will not flush the wrapped
+        #  fileobj when we're closing.
+        self.__closing = True
         super(FileWrapper,self).close()
         if hasattr(self._fileobj,"close"):
             self._fileobj.close()
@@ -126,7 +136,7 @@ class FileWrapper(FileLikeBase):
     def flush(self):
         """Flush the write buffers of the file."""
         super(FileWrapper,self).flush()
-        if hasattr(self._fileobj,"flush"):
+        if not self.__closing and hasattr(self._fileobj,"flush"):
             self._fileobj.flush()
     
     def _read(self,sizehint=-1):
@@ -162,7 +172,7 @@ from filelike.wrappers.crypto import Encrypt, Decrypt
 _deprecate("DecryptFile",Decrypt)
 _deprecate("EncryptFile",Encrypt)
 
-from filelike.wrappers.buffered import Buffered
+from filelike.wrappers.buffer import Buffer, FlushableBuffer
 
 from filelike.wrappers.compress import BZip2, UnBZip2
 _deprecate("BZ2File",UnBZip2)

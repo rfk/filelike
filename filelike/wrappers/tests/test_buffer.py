@@ -1,5 +1,5 @@
 
-from filelike.wrappers import Buffered
+from filelike.wrappers import Buffer, FlushableBuffer
 from filelike import tests
 
 import unittest
@@ -17,7 +17,7 @@ def get_buffered_value(f):
 
 
 def def_getvalue_maybe_buffered(f,s,trans_s=None,trans_b=None):
-    if isinstance(f._fileobj,Buffered):
+    if isinstance(f._fileobj,Buffer):
         if trans_b:
             def getvalue():
                 return trans_b(get_buffered_value(f._fileobj))
@@ -34,21 +34,20 @@ def def_getvalue_maybe_buffered(f,s,trans_s=None,trans_b=None):
     return getvalue
 
 
-class Test_Buffered(tests.Test_ReadWriteSeek):
-    """Testcases for the Buffered class."""
+class Test_Buffer(tests.Test_ReadWriteSeek):
+    """Testcases for the Buffer class."""
     
     def makeFile(self,contents,mode):
         s = StringIO(contents)
         if "a" in mode:
             s.seek(0,2)
-        f = Buffered(s,mode)
+        f = Buffer(s,mode)
         def getvalue():
             return get_buffered_value(f)
         f.getvalue = getvalue
         return f
 
     def test_buffer_w(self):
-        """Test that Buffered writes its contents out correctly on close."""
         f = self.makeFile("","w")
         s = f._fileobj
         close = s.close
@@ -63,7 +62,6 @@ class Test_Buffered(tests.Test_ReadWriteSeek):
         self.assertEquals(s.getvalue(),"testing")
 
     def test_buffer_rw(self):
-        """Test that Buffered writes its contents out correctly on close."""
         f = self.makeFile("testing","r+")
         s = f._fileobj
         close = s.close
@@ -78,7 +76,6 @@ class Test_Buffered(tests.Test_ReadWriteSeek):
         self.assertEquals(s.getvalue(),"hellong")
 
     def test_buffer_a(self):
-        """Test that Buffered writes its contents out correctly on close."""
         f = self.makeFile("hello","a")
         s = f._fileobj
         close = s.close
@@ -93,7 +90,6 @@ class Test_Buffered(tests.Test_ReadWriteSeek):
         self.assertEquals(s.getvalue(),"hellotesting")
 
     def test_buffer_ra(self):
-        """Test that Buffered writes its contents out correctly on close."""
         f = self.makeFile("hello","a+")
         s = f._fileobj
         close = s.close
@@ -102,8 +98,68 @@ class Test_Buffered(tests.Test_ReadWriteSeek):
         s.close = noop
         f.write("testing")
         f.flush()
-        self.assertEquals(f.getvalue(),"testing")
+        self.assertEquals(f.getvalue(),"hellotesting")
         self.assertEquals(s.getvalue(),"hello")
+        f.close()
+        self.assertEquals(s.getvalue(),"hellotesting")
+
+
+class Test_FlushableBuffer(tests.Test_ReadWriteSeek):
+    """Testcases for the FlushableBuffer class."""
+    
+    def makeFile(self,contents,mode):
+        s = StringIO(contents)
+        if "a" in mode:
+            s.seek(0,2)
+        f = FlushableBuffer(s,mode)
+        def getvalue():
+            return s.getvalue()
+        f.getvalue = getvalue
+        return f
+
+    def test_buffer_w(self):
+        f = self.makeFile("","w")
+        s = f._fileobj
+        close = s.close
+        def noop():
+            pass
+        s.close = noop
+        f.write("testing")
+        f.close()
+        self.assertEquals(s.getvalue(),"testing")
+
+    def test_buffer_rw(self):
+        f = self.makeFile("testing","r+")
+        s = f._fileobj
+        close = s.close
+        def noop():
+            pass
+        s.close = noop
+        f.write("hello")
+        f.close()
+        self.assertEquals(s.getvalue(),"hellong")
+
+    def test_buffer_a(self):
+        f = self.makeFile("hello","a")
+        s = f._fileobj
+        close = s.close
+        def noop():
+            pass
+        s.close = noop
+        f.write("testing")
+        f.close()
+        self.assertEquals(s.getvalue(),"hellotesting")
+
+    def test_buffer_ra(self):
+        f = self.makeFile("hello","a+")
+        self.assertEquals(f._fileobj.tell(),5)
+        self.assertEquals(f.tell(),5)
+        s = f._fileobj
+        close = s.close
+        def noop():
+            pass
+        s.close = noop
+        f.write("testing")
         f.close()
         self.assertEquals(s.getvalue(),"hellotesting")
 

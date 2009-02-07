@@ -30,7 +30,7 @@ each building other compression wrappers.
 import filelike
 from filelike.wrappers import FileWrapper
 from filelike.wrappers.translate import Translate
-from filelike.wrappers.buffered import Buffered
+from filelike.wrappers.buffer import FlushableBuffer
 
 import bz2
 
@@ -63,7 +63,7 @@ class Decompress(FileWrapper):
             # Rats, writing + seekabilty == inefficient.
             # Operating in a buffer is the only sensible option
             myFileObj = Translate(fileobj,mode=mode,rfunc=self.decompress,wfunc=self.compress)
-            myFileObj = Buffered(myFileObj,mode=mode)
+            myFileObj = FlushableBuffer(myFileObj,mode=mode)
         super(Decompress,self).__init__(myFileObj,mode=mode)
 
     def _read(self,sizehint=-1):
@@ -100,7 +100,7 @@ class Compress(FileWrapper):
             # Rats, writing + seekabilty == inefficient
             # Operating in a buffer is the only sensible option
             myFileObj = Translate(fileobj,mode=mode,rfunc=self.compress,wfunc=self.decompress)
-            myFileObj = Buffered(myFileObj,mode=mode)
+            myFileObj = FlushableBuffer(myFileObj,mode=mode)
         super(Compress,self).__init__(myFileObj,mode=mode)
 
 
