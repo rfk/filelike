@@ -11,9 +11,7 @@ class Test_Slice_Whole(tests.Test_ReadWriteSeek):
 
     def makeFile(self,contents,mode,start=0,stop=None,resizable=False):
         s = StringIO(contents)
-        f = Slice(s,start,stop,resizable=resizable)
-        if "a" in mode:
-            f.seek(0,2)
+        f = Slice(s,start,stop,resizable=resizable,mode=mode)
         def getvalue():
             val = s.getvalue()
             if stop:

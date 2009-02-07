@@ -49,12 +49,10 @@ class Buffered(FileWrapper):
     
     def __init__(self,fileobj,mode=None):
         """Buffered file wrapper constructor."""
-        super(Buffered,self).__init__(fileobj,mode)
         self._buffer = TemporaryFile()
         self._in_eof = False
         self._in_pos = 0
-        if hasattr(self,"mode") and "a" in self.mode:
-            self.seek(0,2)
+        super(Buffered,self).__init__(fileobj,mode)
 
     def flush(self):
         # flush the buffer; we only write to the underlying file on close

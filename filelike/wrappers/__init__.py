@@ -80,7 +80,7 @@ class FileWrapper(FileLikeBase):
     which just calls read() and write() on the wrapped object.  Subclasses
     will probably want to override these.
     """
-    
+
     def __init__(self,fileobj,mode=None):
         """FileWrapper constructor.
         
@@ -102,6 +102,9 @@ class FileWrapper(FileLikeBase):
         # Copy useful attributes of the fileobj
         if hasattr(fileobj,"name"):
             self.name = fileobj.name
+        # Respect append-mode setting
+        if hasattr(self,"mode") and "a" in self.mode:
+            self.seek(0,2)
         
     def close(self):
         """Close the object for reading/writing."""

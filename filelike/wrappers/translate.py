@@ -33,7 +33,7 @@ therefore optimise these operations.
 """ 
 
 import filelike
-from filelike.wrappers import FileWrapper
+from filelike.wrappers import FileWrapper, Debug
 
 
 class Translate(FileWrapper):
@@ -67,7 +67,17 @@ class Translate(FileWrapper):
         transformed, and 'rfunc' and 'wfunc' the callable objects that will
         transform the file's contents.
         """
+        #fileobj = Debug(fileobj,"TRN")
         super(Translate,self).__init__(fileobj,mode)
+        # If we're writable, the underlying file cannot be in append mode.
+        # If it were, we wouldn't be able to re-write the head of the stream.
+        if self._check_mode("w"):
+            if hasattr(fileobj,"mode") and "a" in fileobj.mode:
+                raise ValueError("Translated stream musnt't be opened in append mode.")
+        # To be seekable, we must be readable
+        if self._check_mode("w") and not self._check_mode("w-"):
+            if not self._check_mode("r"):
+                raise ValueError("To be seekable, Translate() instances must be readable.")
         # rfunc must be provided for readable files
         if self._check_mode("r-"):
             if rfunc is None:
@@ -189,13 +199,12 @@ class BytewiseTranslate(FileWrapper):
             self._rfunc = func
             self._wfunc = func
         else:
-            if hasattr(self,"mode"):
-              if "r" in self.mode or "+" in self.mode:
+            if self._check_mode("r-"):
                 if rfunc is None:
-                  raise ValueError("Must provide <rfunc> for readable files")
-              if "w" in self.mode or "a" in self.mode:
+                    raise ValueError("Must provide <rfunc> for readable files")
+            if self._check_mode("w-"):
                 if wfunc is None:
-                  raise ValueError("Must provide <wfunc> for writable files")
+                    raise ValueError("Must provide <wfunc> for writable files")
             self._rfunc = rfunc
             self._wfunc = wfunc
             

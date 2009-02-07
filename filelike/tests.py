@@ -98,7 +98,6 @@ class Test_ReadWrite(Test_Read):
 
     def test_write_stream(self):
         f = self.makeFile("","w-")
-        self.assertEquals(f.getvalue(),self.empty_contents)
         f.write(self.contents)
         self.assertEquals(f.tell(),len(self.contents))
         f.flush()
