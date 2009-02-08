@@ -231,7 +231,11 @@ class UnPadToBlockSize(FileWrapper):
 
     def _write(self,data,flushing=False):
         """Write the given string to the file."""
-        size = self._round_down(len(data))
+        #  To ensure the pad is written, we always return non-empty leftovers.
+        #  This forces a flushing write on file close.
+        if data == "":
+            return ""
+        size = self._round_down(len(data)-1)
         self._fileobj.write(data[:size])
         leftover = data[size:]
         if not flushing:
@@ -239,7 +243,7 @@ class UnPadToBlockSize(FileWrapper):
         # Flushing, so we need to pad the data.  If the file is readable,
         # check to see if we're in the middle and pad using existing data.
         if self._check_mode("r"):
-            lenNB = self._round_up(len(leftover))
+            lenNB = self._round_up(len(leftover)+1)
             nextBlock = self._fileobj.read(lenNB)
             self._fileobj.seek(-1*len(nextBlock),1)
             if lenNB == len(nextBlock):

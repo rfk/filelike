@@ -129,6 +129,15 @@ class Test_UnPadToBlockSize7(Test_UnPadToBlockSize5):
     blocksize = 7
 
 
+class Test_UnPadToBlockSize8(Test_UnPadToBlockSize5):
+    """Testcases for UnPadToBlockSize with blocksize=7."""
+
+    contents = "this text is a multiple of eight"
+    text_plain = ["Zhis is sample texty"]
+    text_padded = ["Zhis is sample textyZXXX"]
+    blocksize = 8
+
+
 class Test_UnPadToBlockSize16(Test_UnPadToBlockSize5):
     """Testcases for UnPadToBlockSize with blocksize=16."""
 
