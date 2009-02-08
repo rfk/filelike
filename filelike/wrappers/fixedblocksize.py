@@ -47,8 +47,8 @@ class FixedBlockSize(FileWrapper):
     """
     
     def __init__(self,fileobj,blocksize,mode=None):
-        super(FixedBlockSize,self).__init__(fileobj,mode)
         self.blocksize = blocksize
+        super(FixedBlockSize,self).__init__(fileobj,mode)
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""

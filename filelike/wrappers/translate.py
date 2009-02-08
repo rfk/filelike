@@ -69,15 +69,15 @@ class Translate(FileWrapper):
         transformed, and 'rfunc' and 'wfunc' the callable objects that will
         transform the file's contents.
         """
-        #fileobj = Debug(fileobj,"TRN")
-        super(Translate,self).__init__(fileobj,mode)
+        if mode is None:
+            mode = getattr(fileobj,mode,"r+")
         # rfunc must be provided for readable files
-        if self._check_mode("r-"):
+        if self._check_mode("r-",mode):
             if rfunc is None:
                 raise ValueError("Must provide 'rfunc' for readable files")
         # wfunc should be given for writable files, but we default to
         # using rfunc if it is specified.
-        if self._check_mode("w-"):
+        if self._check_mode("w-",mode):
             if wfunc is None:
                 if rfunc is None:
                     raise ValueError("Must provide 'wfunc' for writable files")
@@ -86,6 +86,7 @@ class Translate(FileWrapper):
         self._wfunc = self._normalise_func(wfunc)
         self._pos = 0
         self._read_eof = False
+        super(Translate,self).__init__(fileobj,mode)
 
     def _normalise_func(self,func):
         """Adjust a function to support flush() and reset() methods.

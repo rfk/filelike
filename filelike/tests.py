@@ -96,6 +96,14 @@ class Test_ReadWrite(Test_Read):
         self.assertEquals(f.getvalue(),self.contents)
         f.close()
 
+    def test_append(self):
+        f = self.makeFile(self.empty_contents,"a")
+        f.write(self.contents)
+        self.assertEquals(f.tell(),len(self.contents))
+        f.flush()
+        self.assertEquals(f.getvalue(),self.contents)
+        f.close()
+
     def test_write_stream(self):
         f = self.makeFile("","w-")
         f.write(self.contents)
@@ -167,6 +175,7 @@ class Test_ReadWriteSeek(Test_ReadWrite):
         f.flush()
         self.assertEquals(f.getvalue(),self.contents)
         f.seek(-5,2)
+        self.assertEquals(f.tell(),len(self.contents) - 5)
         f.write(self.contents[-5:])
         f.flush()
         self.assertEquals(f.getvalue(),self.contents)

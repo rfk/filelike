@@ -19,10 +19,6 @@ class Test_Translate(tests.Test_ReadWriteSeek):
         f.getvalue = getvalue
         return f
 
-    def test_write_twice(self):
-        method = super(Test_Translate,self).test_write_twice
-        self.assertRaises(NotSeekableError,method)
-
 
 class Test_BytewiseTranslate(tests.Test_ReadWriteSeek):
     """Testcases for the BytewiseTranslate class."""

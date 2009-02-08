@@ -1,6 +1,6 @@
 
 from filelike.wrappers import Decrypt, Encrypt
-from filelike import tests
+from filelike import tests, NotSeekableError
 from filelike.wrappers.tests.test_buffer import def_getvalue_maybe_buffered
 import unittest
 from StringIO import StringIO
@@ -24,6 +24,10 @@ class Test_Encrypt(tests.Test_ReadWriteSeek):
         from Crypto.Cipher import DES
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
         super(Test_Encrypt,self).setUp()
+
+    def test_append(self):
+        method = super(Test_Encrypt,self).test_append
+        self.assertRaises(NotSeekableError,method)
 
 
 class Test_EncryptFB(tests.Test_ReadWriteSeek):
@@ -53,6 +57,10 @@ class Test_EncryptFB(tests.Test_ReadWriteSeek):
         self.cipher = DES.new('abcdefgh',DES.MODE_CBC,"12345678")
         super(Test_EncryptFB,self).setUp()
 
+    def test_append(self):
+        method = super(Test_EncryptFB,self).test_append
+        self.assertRaises(NotSeekableError,method)
+
 
 class Test_Decrypt(tests.Test_ReadWriteSeek):
     """Testcases for the Decrypt wrapper class"""
@@ -72,6 +80,10 @@ class Test_Decrypt(tests.Test_ReadWriteSeek):
         from Crypto.Cipher import DES
         self.cipher = DES.new('abcdefgh',DES.MODE_ECB)
         super(Test_Decrypt,self).setUp()
+
+    def test_append(self):
+        method = super(Test_Decrypt,self).test_append
+        self.assertRaises(NotSeekableError,method)
 
 
 class Test_DecryptFB(tests.Test_ReadWriteSeek):
@@ -100,4 +112,9 @@ class Test_DecryptFB(tests.Test_ReadWriteSeek):
         from Crypto.Cipher import DES
         self.cipher = DES.new('abcdefgh',DES.MODE_CBC,"12345678")
         super(Test_DecryptFB,self).setUp()
+
+    def test_append(self):
+        method = super(Test_DecryptFB,self).test_append
+        self.assertRaises(NotSeekableError,method)
+
 

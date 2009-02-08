@@ -42,6 +42,10 @@ class Test_Slice_StartStop(Test_Slice_Whole):
         method = super(Test_Slice_StartStop,self).test_write
         self.assertRaises(IOError,method)
 
+    def test_append(self):
+        method = super(Test_Slice_StartStop,self).test_write
+        self.assertRaises(IOError,method)
+
     def test_write_stream(self):
         method = super(Test_Slice_StartStop,self).test_write_stream
         self.assertRaises(IOError,method)

@@ -43,11 +43,16 @@ class PadToBlockSize(FileWrapper):
     """
 
     def __init__(self,fileobj,blocksize,mode=None):
-        super(PadToBlockSize,self).__init__(fileobj,mode)
         self.blocksize = blocksize
-        self._pad_loc = None
         self._pad_read = ""
         self._pad_unread = ""
+        super(PadToBlockSize,self).__init__(fileobj,mode)
+        if "a" in self.mode:
+            # Position at the start of the padding, since that's
+            # where any additional writes need to happen
+            self._pad_unread = self._pad_read
+            self._pad_read = ""
+            self._sbuffer = None
     
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
@@ -83,7 +88,6 @@ class PadToBlockSize(FileWrapper):
             sizehint = self._round_up(sizehint)
         data = self._fileobj.read(sizehint)
         if sizehint < 0 or len(data) < sizehint:
-            self._pad_loc = self._fileobj.tell()
             self._pad_unread = self._padding(data)
         return data
 
@@ -126,7 +130,12 @@ class PadToBlockSize(FileWrapper):
         # Remove the padding data from the leftovers
         if maybePad:
             zIdx = leftover.rfind("Z")
-            self._fileobj.write(leftover[:zIdx])
+            data = leftover[:zIdx]
+            padding = self._padding(data)
+            padstop = len(leftover) - zIdx
+            self._fileobj.write(data)
+            self._pad_read = padding[:padstop]
+            self._pad_unread = padding[padstop:]
         return None
 
     def _seek(self,offset,whence):
@@ -137,26 +146,39 @@ class PadToBlockSize(FileWrapper):
         the file and its padding, you'll be placed at EOF.
         """
         if whence > 0:
+            # TODO: implementing these shouldn't be that hard...
             raise NotImplementedError
-        # Slow simulation of seek by actually re-reading all the data.
+        print "SEEK:", offset, whence
         self._fileobj.seek(0,0)
         self._pad_unread = ""
         self._pad_read = ""
-        data = self._fileobj.read(offset)
-        boundary = self._round_down(len(data))
-        # 1) We're within the file, so it's nice and easy
-        if len(data) == offset:
-            self._fileobj.seek(boundary-offset,1)
-            return data[boundary:offset]
+        if offset == 0:
+            return None
+        # Slow simulation of seek by actually re-reading all the data.
+        boundary = self._round_down(offset)
+        bytes_read = 0
+        while bytes_read < boundary:
+            data = self._fileobj.read(min(self._bufsize,boundary-bytes_read))
+            if data == "":
+                break
+            bytes_read += len(data)
+        # 1) The boundary is within the file
+        if bytes_read == boundary:
+            data = self._fileobj.read(offset-boundary)
+            self._fileobj.seek(-1*len(data),1)
+            diff = offset - (len(data) + bytes_read)
+            if diff > 0:
+                # But the offset isn't, need to read some padding
+                padding = self._padding(data)
+                self._pad_read = padding[:diff]
+                self._pad_unread = padding[diff:]
+            return data + self._pad_read
         # 2) We're past the underlying file.
-        padding = self._padding(data)
-        self._fileobj.seek(boundary-len(data),1)
-        diff = offset - len(data)
-        # If we're inside the padding, only return what's necessary.
-        # Otherwise, we've seeked to the end of the whole thing.
-        if diff <= len(padding):
-            padding = padding[:diff]
-        return data[boundary:] + padding
+        padding = self._padding("A"*(bytes_read % self.blocksize))
+        diff = offset - bytes_read
+        self._pad_read = padding[:diff]
+        self._pad_unread = padding[diff:]
+        return self._pad_read
 
     def _tell(self):
         return self._fileobj.tell() + len(self._pad_read)
@@ -173,9 +195,9 @@ class UnPadToBlockSize(FileWrapper):
     _append_requires_overwrite = True
     
     def __init__(self,fileobj,blocksize,mode=None):
-        super(UnPadToBlockSize,self).__init__(fileobj,mode)
         self.blocksize = blocksize
         self._pad_seen = ""
+        super(UnPadToBlockSize,self).__init__(fileobj,mode)
 
     def _round_up(self,num):
         """Round <num> up to a multiple of the block size."""
