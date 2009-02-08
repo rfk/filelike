@@ -162,23 +162,24 @@ class PadToBlockSize(FileWrapper):
             if data == "":
                 break
             bytes_read += len(data)
-        # 1) The boundary is within the file
-        if bytes_read == boundary:
-            data = self._fileobj.read(offset-boundary)
-            self._fileobj.seek(-1*len(data),1)
-            diff = offset - (len(data) + bytes_read)
-            if diff > 0:
-                # But the offset isn't, need to read some padding
-                padding = self._padding(data)
-                self._pad_read = padding[:diff]
-                self._pad_unread = padding[diff:]
-            return data + self._pad_read
-        # 2) We're past the underlying file.
-        padding = self._padding("A"*(bytes_read % self.blocksize))
-        diff = offset - bytes_read
-        self._pad_read = padding[:diff]
-        self._pad_unread = padding[diff:]
-        return self._pad_read
+        # If the boundary is not within the file, we must have seeked right
+        # to (or past) the end of the padding.  So just position at end.
+        if bytes_read < boundary:
+            data = ""
+            self._pad_read = self._padding("A"*(bytes_read % self.blocksize))
+            return None
+        # Otherwise, we may have to return some data from the underlying file
+        pos = self._fileobj.tell()
+        data = self._fileobj.read(offset-boundary)
+        self._fileobj.seek(-1*len(data),1)
+        assert self._fileobj.tell() == pos, "peeking failed"
+        diff = offset - (len(data) + bytes_read)
+        assert diff >= 0, "peeking failed"
+        if diff > 0:
+            # The target offset is somewhere in the padding
+            padding = self._padding(data)
+            return data + padding[:diff]
+        return data
 
     def _tell(self):
         return self._fileobj.tell() + len(self._pad_read)
