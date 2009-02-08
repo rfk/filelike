@@ -261,6 +261,8 @@ class UnPadToBlockSize(FileWrapper):
         if whence > 0:
             raise NotImplementedError
         self._fileobj.seek(0,0)
+        if offset == 0:
+            return None
         self._pad_seen = ""
         data = self._fileobj.read(offset)
         eof = data.rfind("Z")
