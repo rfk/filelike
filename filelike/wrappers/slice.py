@@ -55,23 +55,26 @@ class Slice(FileWrapper):
     def __init__(self,fileobj,start=0,stop=None,mode=None,resizable=False):
         """Slice constuctor.
 
-        'start' and 'stop' and the indicies at which to start and stop the
-        slice.  'resizable' indicates whether the slice is allowed to grow
+        'start' and 'stop' are the indicies at which to start and stop the
+        slice, and 'resizable' indicates whether the slice is allowed to grow
         in response to writes beyond the 'stop' index.
         """
-        super(Slice,self).__init__(fileobj,mode)
         if start < 0:
-            raise ValueError("'start' index cannot be negative.")
+            raise ValueError("start index cannot be negative.")
         if stop is not None and stop < 0:
-            self._fileobj.seek(0,2)
-            stop = self._fileobj.tell() + stop
-        self._fileobj.seek(start,0)
+            try:
+                stop = fileobj.size + stop
+            except AttributeError:
+                pos = fileobj.tell()
+                fileobj.seek(0,2)
+                stop = fileobj.tell() + stop
+                fileobj.seek(pos,0)
         self.start = start
         self.stop = stop
         self._resizable = resizable
-        if hasattr(self,"mode"):
-            if "a" in self.mode:
-                self.seek(0,2)
+        super(Slice,self).__init__(fileobj,mode)
+        if "a" not in self.mode:
+            self._fileobj.seek(start)
     
     def _read(self,size=-1):
         """Read approximately <size> bytes from the file."""
