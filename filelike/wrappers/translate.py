@@ -70,7 +70,7 @@ class Translate(FileWrapper):
         transform the file's contents.
         """
         if mode is None:
-            mode = getattr(fileobj,mode,"r+")
+            mode = getattr(fileobj,"mode","r+")
         # rfunc must be provided for readable files
         if self._check_mode("r-",mode):
             if rfunc is None:
