@@ -258,7 +258,8 @@ class FileLikeBase(object):
             self.closed = True
 
     def __del__(self):
-        self.close()
+        if not getattr(self,"closed",True):
+            self.close()
 
     def __enter__(self):
         return self
@@ -320,7 +321,7 @@ class FileLikeBase(object):
                         if hasattr(self,"size"):
                             offset = self.size + offset
                         else:
-                            for ln in self: pass
+                            self._do_read_rest()
                             offset = self.tell() + offset
                     else:
                         # absolute seek already failed, don't try again
@@ -359,6 +360,20 @@ class FileLikeBase(object):
         if self.closed:
             raise IOError("File has been closed")
         self._assert_mode("r-")
+        return self._do_read(size)
+
+    def _do_read(self,size):
+        """Private method to read from the file.
+
+        This method behaves the same as self.read(), but skips some
+        permission and sanity checks.  It is intended for use in simulating
+        seek(), where we may want to read (and discard) information from
+        a file not opened in read mode.
+
+        Note that this may still fail if the file object actually can't
+        be read from - it just won't check whether the mode string gives
+        permission.
+        """
         # If we were previously writing, ensure position is correct
         if self._wbuffer is not None:
             self.seek(0,1)
@@ -371,9 +386,9 @@ class FileLikeBase(object):
             s = self._soffset
             self._soffset = 0
             while s > self._bufsize:
-                self.read(self._bufsize)
+                self._do_read(self._bufsize)
                 s -= self._bufsize
-            self.read(s)
+            self._do_read(s)
         # Should the entire file be read?
         if size <= 0:
             if self._rbuffer:
@@ -410,6 +425,12 @@ class FileLikeBase(object):
                 self._rbuffer = ""
             output = data
         return output
+
+    def _do_read_rest(self):
+        """Private method to read the file through to EOF."""
+        data = self._do_read(self._bufsize)
+        while data != "":
+            data = self._do_read(self._bufsize)
         
     def readline(self,size=-1):
         """Read a line from the file, or at most <size> bytes."""
@@ -466,7 +487,10 @@ class FileLikeBase(object):
         elif self._soffset:
             s = self._soffset
             self._soffset = 0
-            string = self.read(s) + string
+            try:
+                string = self._do_read(s) + string
+            except NotReadableError:
+                raise NotSeekableError("File not readable, could not complete simulation of seek")
             self.seek(0,0)
         if self._wbuffer:
             string = self._wbuffer + string
