@@ -50,6 +50,10 @@ class Test_Read(unittest.TestCase):
         c = self.file.read()
         self.assertEquals(c,self.contents)
 
+    def test_read_stream(self):
+        f = self.makeFile(self.contents,"r-")
+        self.assertEquals(f.read(),self.contents)
+
     def test_read_size(self):
         c = self.file.read(5)
         self.assertEquals(c,self.contents[:5])
@@ -105,7 +109,7 @@ class Test_ReadWrite(Test_Read):
         f.close()
 
     def test_write_stream(self):
-        f = self.makeFile("","w-")
+        f = self.makeFile(self.empty_contents,"w-")
         f.write(self.contents)
         self.assertEquals(f.tell(),len(self.contents))
         f.flush()
