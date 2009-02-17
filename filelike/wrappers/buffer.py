@@ -65,8 +65,7 @@ class Buffer(FileWrapper):
 
     def _write_out_buffer(self):
         if self._check_mode("r"):
-            if not self._in_eof:
-                self._read_rest()
+            self._read_rest()
             if "a" in self.mode:
                 self._buffer.seek(self._in_pos)
                 self._fileobj.seek(self._in_pos)
@@ -133,6 +132,8 @@ class Buffer(FileWrapper):
         
     def _read_rest(self):
         """Read the rest of the input stream."""
+        if self._in_eof:
+            return
         pos = self._buffer.tell()
         self._buffer.seek(0,2)
         data = self._fileobj.read(self._bufsize)
@@ -160,9 +161,10 @@ class FlushableBuffer(Buffer):
             self._start_pos = self._fileobj.tell()
 
     def flush(self):
-        pos = self._buffer.tell()
-        self._write_out_buffer()
-        self._buffer.seek(pos)
+        if self._check_mode("w-"):
+            pos = self._buffer.tell()
+            self._write_out_buffer()
+            self._buffer.seek(pos)
         # Skip Buffer.flush, as it doesn't call parent class methods
         super(Buffer,self).flush()
 
@@ -175,8 +177,7 @@ class FlushableBuffer(Buffer):
 
     def _write_out_buffer(self):
         if self._check_mode("r"):
-            if not self._in_eof:
-                self._read_rest()
+            self._read_rest()
             if "a" in self.mode:
                 self._buffer.seek(self._in_pos)
                 self._fileobj.seek(self._in_pos)
