@@ -8,7 +8,7 @@
 import ez_setup
 ez_setup.use_setuptools()
 
-from setuptools import setup, find_packages, Extension
+from setuptools import setup, find_packages
 
 #  Import to allow pertinent info to be extracted
 import filelike

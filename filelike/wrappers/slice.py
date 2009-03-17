@@ -74,7 +74,8 @@ class Slice(FileWrapper):
         self._resizable = resizable
         super(Slice,self).__init__(fileobj,mode)
         if "a" not in self.mode:
-            self._fileobj.seek(start)
+            if self._fileobj.tell() < start:
+                self._fileobj.seek(start)
     
     def _read(self,size=-1):
         """Read approximately <size> bytes from the file."""
