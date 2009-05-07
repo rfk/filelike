@@ -605,8 +605,11 @@ class Opener(object):
         # Open the file
         for o in self.openers:
             try:
+                print o
                 f = o(filename,mode)
-            except IOError:
+                print f
+            except IOError,e:
+                print e
                 f = None
             if f is not None:
                 break
@@ -641,7 +644,7 @@ def _urllib_opener(filename,mode):
 def _file_opener(filename,mode):
     # Dont open URLS as local files
     comps = urlparse.urlparse(filename)
-    if comps[0] != "":
+    if not comps[0] and not comps[1]:
         return None
     return file(filename,mode)
 

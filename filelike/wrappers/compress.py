@@ -174,3 +174,51 @@ def _BZip2_decoder(fileobj):
     return f
 filelike.open.decoders.append(_BZip2_decoder)
 
+
+class NullZipMixin(object):
+    """Mixin for Compress/Decompress subclasses using NullZip."""
+
+    def __init__(self,*args,**kwds):
+        class NullCompressor(object):
+            def compress(self,data):
+                return data
+            def decompress(self,data):
+                return data
+            def flush(self):
+                return ""
+        # Compression function with flush and reset.
+        c = [NullCompressor()]
+        def compress(data):
+            if data == "":
+                return ""
+            return c[0].compress(data)
+        def c_flush():
+            return c[0].flush()
+        def c_reset():
+            c[0] = NullCompressor()
+        compress.flush = c_flush
+        compress.reset = c_reset
+        self.compress = compress
+        # Decompression funtion with reset
+        d = [NullCompressor()]
+        def decompress(data):
+            if data == "":
+                return ""
+            return d[0].decompress(data)
+        def d_reset():
+            d[0] = NullCompressor()
+        decompress.reset = d_reset
+        self.decompress = decompress
+        # These can now be used by superclass constructors
+        super(NullZipMixin,self).__init__(*args,**kwds)
+
+
+class UnNullZip(NullZipMixin,Decompress):
+    """Class for reading and writing to a null-ziped file."""
+    pass
+
+
+class NullZip(NullZipMixin,Compress):
+    """Class for reading and writing a null-ziped file."""
+    pass
+

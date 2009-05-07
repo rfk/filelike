@@ -48,7 +48,8 @@ class Test_BZip2(tests.Test_ReadWriteSeek):
         """Make sure BZip2 changes are pushed through to actual file."""
         import tempfile
         import os
-        (_,fn) = tempfile.mkstemp()
+        (fd,fn) = tempfile.mkstemp()
+        os.close(fd)
         try:
             f = open(fn,"w")
             f.write("hello world!")
@@ -78,7 +79,8 @@ class Test_UnBZip2(tests.Test_ReadWrite):
         """Make sure UnBZip2 changes are pushed through to actual file."""
         import tempfile
         import os
-        (_,fn) = tempfile.mkstemp()
+        (fd,fn) = tempfile.mkstemp()
+        os.close(fd)
         try:
             f = open(fn,"w")
             f.write(bz2.compress("hello world!"))

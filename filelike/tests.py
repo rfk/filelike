@@ -2,6 +2,7 @@
 import unittest
 from StringIO import StringIO
 import tempfile
+import os
 
 import filelike
 from filelike import to_filelike, is_filelike, join, wrappers
@@ -30,14 +31,22 @@ class Test_Read(unittest.TestCase):
         pass for the built-in file type, how can we expect to achieve
         anything with them?
         """
-        tf = tempfile.NamedTemporaryFile(mode="w")
-        f = ProxyObject(open(tf.name,mode))
-        tf.write(contents)
-        tf.flush()
+        mode = filter(lambda c: c in "rwa+t",mode)
+        if "b" not in mode:
+            mode = mode + "b"
+        if "r" not in mode and "+" not in mode:
+            mode = mode + "+"
+        (fd,nm) = tempfile.mkstemp()
+        os.write(fd,contents)
+        os.close(fd)
+        f = ProxyObject(open(nm,mode))
         def getvalue():
-           return open(tf.name,"r").read()
+           pos = f.tell()
+           f.seek(0)
+           val = f.read()
+           f.seek(pos)
+           return val
         f.getvalue = getvalue
-        f._tempfile = tf
         return f
 
     def setUp(self):
@@ -118,6 +127,7 @@ class Test_ReadWrite(Test_Read):
 
     def test_write_read(self):
         self.file.write("hello")
+        self.file.seek(0,1)
         c = self.file.read()
         self.assertEquals(c,self.contents[5:])
 
@@ -143,7 +153,9 @@ class Test_ReadWriteSeek(Test_ReadWrite):
     def test_read_write_seek(self):
         c = self.file.read(5)
         self.assertEquals(c,self.contents[:5])
+        self.file.seek(0,1)
         self.file.write("hello")
+        self.assertEquals(self.file.tell(),10)
         self.file.seek(0)
         self.assertEquals(self.file.tell(),0)
         c = self.file.read(10)

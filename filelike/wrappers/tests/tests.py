@@ -25,19 +25,21 @@ class Test_OpenerDecoders(unittest.TestCase):
     
     def setUp(self):
         import tempfile
-        handle, self.tfilename = tempfile.mkstemp()
-        self.tfile = os.fdopen(handle,"w+b")
+        fd, self.tfilename = tempfile.mkstemp()
+        os.close(fd)
 
     def tearDown(self):
         os.unlink(self.tfilename)
 
     def test_LocalFile(self):
         """Test opening a simple local file."""
-        self.tfile.write("contents")
-        self.tfile.flush()
+        f = open(self.tfilename,"w")
+        f.write("contents")
+        f.close()
         f = filelike.open(self.tfilename,"r")
         self.assertEquals(f.name,self.tfilename)
         self.assertEquals(f.read(),"contents")
+        f.close()
     
     def test_RemoteBzFile(self):
         """Test opening a remote BZ2 file."""
