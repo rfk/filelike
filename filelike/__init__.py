@@ -33,33 +33,33 @@ higher-level file behaviors.
 
 It also provides some nifty file-handling functions:
 
-    * open:    mirrors the standard open() function but is much cleverer;
-               URLs are automatically fetched, .bz2 files are transparently
-               decompressed, and so-on.
+    :open:    mirrors the standard open() function but is much cleverer;
+              URLs are automatically fetched, .bz2 files are transparently
+              decompressed, and so-on.
 
-    * join:    concatenate multiple file-like objects together so that they
-               act like a single file.
+    :join:    concatenate multiple file-like objects together so that they
+              act like a single file.
 
-    * slice:   access a section of a file-like object as if it were an
-               independent file.
+    :slice:   access a section of a file-like object as if it were an
+              independent file.
 
 
 The "wrappers" subpackage contains a collection of useful classes built on
 top of this framework.  These include:
     
-    * Translate:  pass file contents through an arbitrary translation
-                  function (e.g. compression, encryption, ...)
+    :Translate:  pass file contents through an arbitrary translation
+                 function (e.g. compression, encryption, ...)
                   
-    * Decrypt:    on-the-fly reading and writing to an encrypted file
-                  (using PEP272 cipher API)
+    :Decrypt:    on-the-fly reading and writing to an encrypted file
+                 (using PEP272 cipher API)
 
-    * UnBZip2:    on-the-fly decompression of bzip'd files
-                  (like the standard library's bz2 module, but accepts
-                  any file-like object)
+    :UnBZip2:    on-the-fly decompression of bzip'd files
+                 (like the standard library's bz2 module, but accepts
+                 any file-like object)
 
 As an example of the type of thing this module is designed to achieve, here's
 how the Decrypt wrapper can be used to transparently access an encrypted
-file:
+file::
     
     # Create the decryption key
     from Crypto.Cipher import DES
@@ -74,7 +74,7 @@ the file on-the-fly as it is read.
 
 The "pipeline" subpackage contains facilities for composing these wrappers
 in the form of a unix pipeline.  In the following example, 'f' will read the
-first five lines of an encrypted file:
+first five lines of an encrypted file::
     
     from filelike.pipeline import Decrypt, Head
     f = file("some_encrypted_file.bin") > Decrypt(cipher) | Head(lines=5)
@@ -83,14 +83,14 @@ first five lines of an encrypted file:
 Finally, two utility functions are provided for when code expects to deal with
 file-like objects:
     
-    * is_filelike(obj):   checks that an object is file-like
-    * to_filelike(obj):   wraps a variety of objects in a file-like interface
+    :is_filelike(obj):   checks that an object is file-like
+    :to_filelike(obj):   wraps a variety of objects in a file-like interface
 
 """ 
 
 __ver_major__ = 0
 __ver_minor__ = 3
-__ver_patch__ = 2
+__ver_patch__ = 3
 __ver_sub__ = ""
 __version__ = "%d.%d.%d%s" % (__ver_major__,__ver_minor__,
                               __ver_patch__,__ver_sub__)
@@ -605,11 +605,8 @@ class Opener(object):
         # Open the file
         for o in self.openers:
             try:
-                print o
                 f = o(filename,mode)
-                print f
             except IOError,e:
-                print e
                 f = None
             if f is not None:
                 break
@@ -644,7 +641,7 @@ def _urllib_opener(filename,mode):
 def _file_opener(filename,mode):
     # Dont open URLS as local files
     comps = urlparse.urlparse(filename)
-    if not comps[0] and not comps[1]:
+    if comps[0] and comps[1]:
         return None
     return file(filename,mode)
 
