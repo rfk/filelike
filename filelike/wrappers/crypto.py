@@ -58,6 +58,11 @@ class Decrypt(FileWrapper):
         is the cipher object to be used.  Other arguments are passed through
         to FileWrapper.__init__
         """
+        if mode is None:
+            try:
+                mode = fileobj.mode
+            except AttributeError:
+                mode = "r+"
         self._cipher = cipher
         if cipher.mode == 1:
             # MODE_ECB is a bytewise translation
@@ -84,11 +89,6 @@ class Decrypt(FileWrapper):
             myFileObj = FixedBlockSize(myFileObj,cipher.block_size,mode=mode)
             #  To allow writes with seeks, we need to buffer.
             #  TODO: find a way around this.
-            if mode is None:
-                try:
-                    mode = fileobj.mode
-                except AttributeError:
-                    mode = "r+"
             if self._check_mode("rw",mode):
                 myFileObj = FlushableBuffer(myFileObj,mode=mode)
             elif self._check_mode("w",mode) and "-" not in mode:
