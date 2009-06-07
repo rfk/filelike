@@ -20,8 +20,7 @@ NAME = "filelike"
 DESCRIPTION = "Classes for creating and wrapping file-like objects"
 AUTHOR = "Ryan Kelly"
 AUTHOR_EMAIL = "ryan@rfk.id.au"
-URL = "http://www.rfk.id.au/software/projects/filelike/"
-# TODO: determine proper license
+URL = "http://www.rfk.id.au/software/filelike/"
 LICENSE = "LGPL"
 KEYWORDS = "file filelike file-like filter crypt compress"
 LONG_DESC = filelike.__doc__
