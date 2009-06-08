@@ -149,7 +149,7 @@ class FlushableBuffer(Buffer):
     """Buffered file wrapper that supports flusing.
 
     This subclass of Buffer assumes that the underlying file object can
-    be reset the position 0, allowing calls to flush() to write out to
+    be reset to position 0, allowing calls to flush() to write out to
     the underlying file.
     """
 
