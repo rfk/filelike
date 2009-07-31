@@ -1,4 +1,8 @@
 
+Version 0.3.4
+
+   * More robust mode determination in crypto wrapper
+
 Version 0.3.3
 
    * Windows compatability and testcases
