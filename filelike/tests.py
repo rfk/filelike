@@ -325,3 +325,21 @@ class Test_Docs(unittest.TestCase):
                 print diff
                 raise RuntimeError
 
+
+def build_test_suite():
+    suite = unittest.TestSuite()
+    for (dirnm,_,files) in os.walk(os.path.dirname(filelike.__file__)):
+        for fname in files:
+            if fname.startswith("test") and fname.endswith(".py"):
+                testname = fname[:-3]
+                modnames = []
+                remainder = dirnm
+                while "filelike" not in  modnames:
+                    (remainder,modparent) = os.path.split(remainder)
+                    modnames.insert(0,modparent)
+                testmod = __import__(".".join(modnames),fromlist=(testname,))
+                testmod = getattr(testmod,testname)
+                for nm in dir(testmod):
+                    if nm.startswith("Test"):
+                        suite.addTest(unittest.makeSuite(getattr(testmod,nm)))
+    return suite
