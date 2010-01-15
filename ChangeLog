@@ -1,4 +1,8 @@
 
+Version 0.3.5
+
+   * More robust flushing of Buffer and FlushableBuffer
+
 Version 0.3.4
 
    * More robust mode determination in crypto wrapper
