@@ -59,9 +59,12 @@ class Buffer(FileWrapper):
 
     def _buffer_chunks(self):
         chunk = self._buffer.read(16*1024)
-        while chunk != "":
+        if chunk == "":
             yield chunk
-            chunk = self._buffer.read(16*1024)
+        else:
+            while chunk != "":
+                yield chunk
+                chunk = self._buffer.read(16*1024)
 
     def _write_out_buffer(self):
         if self._check_mode("r"):
