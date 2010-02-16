@@ -252,13 +252,12 @@ class FileLikeBase(object):
 
         The file may not be accessed further once it is closed.
         """
-        if not self.closed:
+        if not getattr(self,"closed",False):
             self.flush()
             self.closed = True
 
     def __del__(self):
-        if not getattr(self,"closed",True):
-            self.close()
+        self.close()
 
     def __enter__(self):
         return self

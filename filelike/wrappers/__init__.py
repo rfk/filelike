@@ -94,6 +94,8 @@ class FileWrapper(FileLikeBase):
         is looked up on the wrapped file if possible.  Otherwise, it
         is not set on the object.
         """
+        # This is used for working around flush/close inefficiencies
+        self._closing = False
         super(FileWrapper,self).__init__()
         self._fileobj = fileobj
         if mode is None:
@@ -109,8 +111,6 @@ class FileWrapper(FileLikeBase):
             if self._check_mode("r"):
                 self._fileobj.seek(0)
             self.seek(0,2)
-        # This is used for working around flush/close inefficiencies
-        self._closing = False
 
     def _validate_mode(self):
         """Check that various file-mode conditions are satisfied."""
@@ -120,6 +120,14 @@ class FileWrapper(FileLikeBase):
             if self._check_mode("w"):
                 if "a" in getattr(self._fileobj,"mode",""):
                     raise ValueError("Underlying file can't be in append mode")
+
+    def __del__(self):
+        try:
+            super(FileWrapper,self).close()
+        except Exception:
+            if hasattr(getattr(self,"_fileobj",None),"close"):
+                self._fileobj.close()
+            raise
         
     def close(self):
         """Close the object for reading/writing."""
