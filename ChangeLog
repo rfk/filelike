@@ -1,8 +1,10 @@
 
 Version 0.3.7
 
-   * Buffer: explicitly pass a max_size to SpooledTemporaryFile, with
-     a sensible default value.
+   * Make __del__ more robust in the case of incomplete initialisation
+     (e.g. errors in a subclass constructor)
+   * filelike.wrappers.Buffer: explicitly pass a max_size argument to
+     SpooledTemporaryFile, with a sensible default value (currently 8KB)
 
 Version 0.3.6
 
