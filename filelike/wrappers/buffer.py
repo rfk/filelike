@@ -36,9 +36,11 @@ import filelike
 from filelike.wrappers import FileWrapper
 
 try:
-    from tempfile import SpooledTemporaryFile as TemporaryFile
+    from tempfile import SpooledTemporaryFile
 except ImportError:
     from tempfile import TemporaryFile
+    def SpooledTemporaryFile(max_size=None,*args,**kwds):
+        return TemporaryFile(*args,**kwds)
 
 
 class Buffer(FileWrapper):
@@ -50,9 +52,9 @@ class Buffer(FileWrapper):
     back to the file on close.
     """
     
-    def __init__(self,fileobj,mode=None):
+    def __init__(self,fileobj,mode=None,max_size_in_memory=1024*8):
         """Buffered file wrapper constructor."""
-        self._buffer = TemporaryFile()
+        self._buffer = SpooledTemporaryFile(max_size=max_size_in_memory)
         self._in_eof = False
         self._in_pos = 0
         super(Buffer,self).__init__(fileobj,mode)

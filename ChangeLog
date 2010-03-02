@@ -1,4 +1,9 @@
 
+Version 0.3.7
+
+   * Buffer: explicitly pass a max_size to SpooledTemporaryFile, with
+     a sensible default value.
+
 Version 0.3.6
 
    * More robust __del__ method for FileWrapper subclasses
