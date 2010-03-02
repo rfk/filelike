@@ -479,7 +479,7 @@ class FileLikeBase(object):
         if self.closed:
             raise IOError("File has been closed")
         self._assert_mode("w-")
-        # If we were previusly reading, ensure position is correct
+        # If we were previously reading, ensure position is correct
         if self._rbuffer is not None:
             self.seek(0,1)
         # If we're actually behind the apparent position, we must also

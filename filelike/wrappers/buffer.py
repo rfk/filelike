@@ -95,18 +95,28 @@ class Buffer(FileWrapper):
         self._buffer.close()
 
     def _read(self,sizehint=-1):
-        #  First return any data available from the buffer
-        data = self._buffer.read(sizehint)
+        #  First return any data available from the buffer.
+        #  Since we don't flush the buffer after every write, certain OSes
+        #  (guess which!) will happy read junk data from the end of it.
+        #  Instead, we explicitly read only up to self._in_pos.
+        if not self._in_eof:
+            buffered_size = self._in_pos - self._buffer.tell()
+            if sizehint >= 0:
+                buffered_size = min(sizehint,buffered_size)
+        else:
+            buffered_size = sizehint
+        data = self._buffer.read(buffered_size)
         if data != "":
             return data
         # Then look for more data in the underlying file
         if self._in_eof:
             return None
         data = self._fileobj.read(sizehint)
-        if sizehint < 0 or len(data) < sizehint:
-            self._in_eof = True
         self._in_pos += len(data)
         self._buffer.write(data)
+        if sizehint < 0 or len(data) < sizehint:
+            self._in_eof = True
+            self._buffer.flush()
         return data
 
     def _write(self,data,flushing=False):
@@ -118,6 +128,7 @@ class Buffer(FileWrapper):
                 self._in_pos += len(junk)
                 if len(junk) < diff:
                     self._in_eof = True
+                    self._buffer.flush()
     
     def _seek(self,offset,whence):
         # Ensure we've read enough to simply do the seek on the buffer
@@ -148,6 +159,7 @@ class Buffer(FileWrapper):
             self._buffer.write(data)
             data = self._fileobj.read(self._bufsize)
         self._in_eof = True 
+        self._buffer.flush()
         self._buffer.seek(pos)
 
 
@@ -161,8 +173,8 @@ class FlushableBuffer(Buffer):
 
     _append_requires_overwite = True
 
-    def __init__(self,fileobj,mode=None):
-        super(FlushableBuffer,self).__init__(fileobj,mode)
+    def __init__(self,fileobj,mode=None,max_size_in_memory=1024*8):
+        super(FlushableBuffer,self).__init__(fileobj,mode,max_size_in_memory)
         if "a" in self.mode and not self._check_mode("r"):
             self._start_pos = self._fileobj.tell()
 
@@ -171,6 +183,7 @@ class FlushableBuffer(Buffer):
             pos = self._buffer.tell()
             self._write_out_buffer()
             self._buffer.seek(pos)
+        self._buffer.flush()
         # Skip Buffer.flush, as it doesn't call parent class methods
         super(Buffer,self).flush()
 

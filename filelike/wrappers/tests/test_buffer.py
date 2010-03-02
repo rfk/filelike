@@ -104,6 +104,20 @@ class Test_Buffer(tests.Test_ReadWriteSeek):
         self.assertEquals(s.getvalue(),"hellotesting")
 
 
+class Test_Buffer_rollover(Test_Buffer):
+    """Testcases for the Buffer class with rollover to tempfile."""
+    
+    def makeFile(self,contents,mode):
+        s = StringIO(contents)
+        if "a" in mode:
+            s.seek(0,2)
+        f = Buffer(s,mode,max_size_in_memory=1)
+        def getvalue():
+            return get_buffered_value(f)
+        f.getvalue = getvalue
+        return f
+
+
 class Test_FlushableBuffer(tests.Test_ReadWriteSeek):
     """Testcases for the FlushableBuffer class."""
     
@@ -162,4 +176,18 @@ class Test_FlushableBuffer(tests.Test_ReadWriteSeek):
         f.write("testing")
         f.close()
         self.assertEquals(s.getvalue(),"hellotesting")
+
+
+class Test_FlushableBuffer_rollover(Test_FlushableBuffer):
+    """Testcases for the FlushableBuffer class with rollover to tempfile."""
+    
+    def makeFile(self,contents,mode):
+        s = StringIO(contents)
+        if "a" in mode:
+            s.seek(0,2)
+        f = FlushableBuffer(s,mode,max_size_in_memory=1)
+        def getvalue():
+            return get_buffered_value(f)
+        f.getvalue = getvalue
+        return f
 
