@@ -252,7 +252,12 @@ class FileLikeBase(object):
 
         The file may not be accessed further once it is closed.
         """
-        if not getattr(self,"closed",False):
+        #  Errors in subclass constructors can cause this to be called without
+        #  having called FileLikeBase.__init__().  Since we need the attrs it
+        #  initialises in cleanup, ensure we call it here.
+        if not hasattr(self,"closed"):
+            FileLikeBase.__init__(self)
+        if not self.closed:
             self.flush()
             self.closed = True
 

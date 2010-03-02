@@ -122,6 +122,15 @@ class FileWrapper(FileLikeBase):
                     raise ValueError("Underlying file can't be in append mode")
 
     def __del__(self):
+        #  Errors in subclass constructors could result in this being called
+        #  without invoking FileWrapper.__init__.  Establish some simple
+        #  invariants to prevent errors in this case.
+        if not hasattr(self,"_fileobj"):
+            self._fileobj = None
+        if not hasattr(self,"_closing"):
+            self._closing = False
+        #  Close the wrapper and the underlying file independently, so the
+        #  latter is still closed on cleanup even if the former errors out.
         try:
             super(FileWrapper,self).close()
         except Exception:

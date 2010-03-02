@@ -92,6 +92,7 @@ class Buffer(FileWrapper):
         if self._check_mode("w"):
             self._write_out_buffer()
         super(Buffer,self).close()
+        self._buffer.close()
 
     def _read(self,sizehint=-1):
         #  First return any data available from the buffer
