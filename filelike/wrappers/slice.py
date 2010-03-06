@@ -40,7 +40,7 @@ class Slice(FileWrapper):
     offset at which it should end.  For example:
 
         s = Slice(f,20)       # read from byte 20 onwards in f
-        s = Slice(f,10,20)    # read from byte 20 up to byte 30 of f
+        s = Slice(f,10,20)    # read from byte 10 up to byte 20 of f
 
     If 'stop' is given and the file is writable, the default behavior is
     for writes beyond the stop position to raise on IOError.  To permit
