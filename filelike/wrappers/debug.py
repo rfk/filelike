@@ -28,7 +28,6 @@ For the moment, just prints to stdout.
 import filelike
 from filelike.wrappers import FileWrapper
 
-import unittest
 from StringIO import StringIO
 
 
