@@ -51,17 +51,6 @@ the file on-the-fly as it is read.
 import filelike
 from filelike import FileLikeBase
 
-import warnings
-
-def _deprecate(oldName,newClass):
-    """Mark an old class name as deprecated."""
-    class Deprecated(newClass):
-        def __init__(self,*args,**kwds):
-            msg = oldName + " is deprecated, please use " + newClass.__name__
-            warnings.warn(msg,category=DeprecationWarning)
-            newClass.__init__(self,*args,**kwds)
-    globals()[oldName] = Deprecated
-
 
 class FileWrapper(FileLikeBase):
     """Base class for objects that wrap a file-like object.
@@ -177,22 +166,16 @@ class FileWrapper(FileLikeBase):
 from filelike.wrappers.debug import Debug
 
 from filelike.wrappers.translate import Translate, BytewiseTranslate
-_deprecate("TransFile",Translate)
 
 from filelike.wrappers.fixedblocksize import FixedBlockSize
-_deprecate("FixedBlockSizeFile",FixedBlockSize)
 
 from filelike.wrappers.padtoblocksize import PadToBlockSize, UnPadToBlockSize
-_deprecate("PaddedToBlockSizeFile",UnPadToBlockSize)
 
 from filelike.wrappers.crypto import Encrypt, Decrypt
-_deprecate("DecryptFile",Decrypt)
-_deprecate("EncryptFile",Encrypt)
 
 from filelike.wrappers.buffer import Buffer, FlushableBuffer
 
 from filelike.wrappers.compress import BZip2, UnBZip2
-_deprecate("BZ2File",UnBZip2)
 
 from filelike.wrappers.unix import Head
 
