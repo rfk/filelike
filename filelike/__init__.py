@@ -26,8 +26,8 @@ objects that provide a rich file-like interface, including reading, writing,
 seeking and iteration.  It also provides a number of useful classes built on
 top of this functionality.
 
-The main class is FileLikeBase, which implements the entire file-like
-interface on top of primitive _read(), _write(), _seek() and _tell() methods.
+The main class is FileLikeBase, which implements the entire file-like interface
+on top of primitive _read(), _write(), _seek(), _tell() and _truncate() methods.
 Subclasses may implement any or all of these methods to obtain the related
 higher-level file behaviors.
 
@@ -89,10 +89,11 @@ file-like objects:
 """ 
 
 __ver_major__ = 0
-__ver_minor__ = 3
-__ver_patch__ = 7
+__ver_minor__ = 4
+__ver_patch__ = 0
 __ver_sub__ = ""
-__version__ = "%d.%d.%d%s" % (__ver_major__,__ver_minor__,__ver_patch__,__ver_sub__)
+__ver_tuple__ = (__ver_major__,__ver_minor__,__ver_patch__,__ver_sub__)
+__version__ = "%d.%d.%d%s" % __ver_tuple__
 
 
 from StringIO import StringIO
@@ -107,6 +108,8 @@ class NotWritableError(IOError):
     pass
 class NotSeekableError(IOError):
     pass
+class NotTruncatableError(IOError):
+    pass
 
 
 class FileLikeBase(object):
@@ -114,15 +117,16 @@ class FileLikeBase(object):
     
     This class takes a lot of the legwork out of writing file-like objects
     with a rich interface.  It implements the higher-level file-like
-    methods on top of four primitive methods: _read, _write, _seek and _tell.
-    See their docstrings for precise details on how these methods behave.
+    methods on top of five primitive methods: _read, _write, _seek, _tell and
+    _truncate. See their docstrings for precise details on how these methods
+    behave.
     
     Subclasses then need only implement some subset of these methods for
     rich file-like interface compatability.  They may of course override
     other methods as desired.
 
-    The class is missing the following attributes, which dont really make
-    sense for anything but real files:
+    The class is missing the following attributes and methods, which dont
+    really make sense for anything but real files:
         
         * fileno()
         * isatty()
@@ -131,11 +135,6 @@ class FileLikeBase(object):
         * name
         * newlines
 
-    It is also missing the following methods purely because of a lack of
-    code, and they may appear at some point in the future:
-
-        * truncate()
-        
     Unlike standard file objects, all read methods share the same buffer
     and so can be freely mixed (e.g. read(), readline(), next(), ...).
 
@@ -162,7 +161,7 @@ class FileLikeBase(object):
     
     """
     
-    def __init__(self,bufsize=1024):
+    def __init__(self,bufsize=1024*64):
         """FileLikeBase Constructor.
 
         The optional argument 'bufsize' specifies the number of bytes to
@@ -284,6 +283,21 @@ class FileLikeBase(object):
     
     def __iter__(self):
         return self
+
+    def truncate(self,size=None):
+        """Truncate the file to the given size.
+
+        If <size> is not specified or is None, the current file position is
+        used.  Note that this method may fail at runtime if the underlying
+        filelike object is not truncatable.
+        """
+        if "-" in getattr(self,"mode",""):
+            raise NotTruncatableError("File is not seekable, can't truncate.")
+        if self._wbuffer:
+            self.flush()
+        if size is None:
+            size = self.tell()
+        self._truncate(size)
 
     def seek(self,offset,whence=0):
         """Move the internal file pointer to the given location."""
@@ -557,7 +571,7 @@ class FileLikeBase(object):
         the start of the file, i.e. offset=0 and whence=0.  If more
         complex seeks are difficult to implement then it may raise
         NotImplementedError to have them simulated (inefficiently) by
-        the higher-level mahinery of this class.
+        the higher-level machinery of this class.
         """
         raise NotSeekableError("Object not seekable")
 
@@ -573,6 +587,19 @@ class FileLikeBase(object):
         returned by this method (the "actual position").
         """
         raise NotSeekableError("Object not seekable")
+
+    def _truncate(self,size):
+        """Truncate the file's size to <size>.
+
+        This method must be implemented by subclasses that wish to be
+        truncatable.  It must truncate the file to exactly the given size
+        or fail with an IOError.
+
+        Note that <size> will never be None; if it was not specified by the
+        user then it is calculated as the file's apparent position (which may
+        be different to its actual position due to buffering).
+        """
+        raise NotTruncatableError("Object not truncatable")
 
 
 class Opener(object):

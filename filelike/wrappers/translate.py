@@ -158,6 +158,10 @@ class Translate(FileWrapper):
         if hasattr(self._wfunc,"reset"):
             self._wfunc.reset()
 
+    def _truncate(self,size):
+        msg = "Translate wrapper is not truncatable"
+        raise filelike.NotTruncatableError(msg)
+
  
 class BytewiseTranslate(FileWrapper):
     """Class implementing a bytewise translation on a file's contents.
@@ -219,6 +223,6 @@ class BytewiseTranslate(FileWrapper):
         """Write the given data to the file."""
         self._fileobj.write(self._wfunc(data))
 
-    # Since this is a bytewise translation, the default seek() and tell()
-    # will do what we want - simply move the underlying file object.
+    # Since this is a bytewise translation, the default implementations of
+    # _seek(), _tell() and _truncate() will do what we want.
 

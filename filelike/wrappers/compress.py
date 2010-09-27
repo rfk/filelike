@@ -23,7 +23,7 @@
     
 This module provides the filelike wrappers 'BZip2' and 'UnBZip2' for dealing
 with files compressed in bz2 format.  It also provides some base classes for
-each building other compression wrappers.
+building other compression wrappers.
 
 """ 
 

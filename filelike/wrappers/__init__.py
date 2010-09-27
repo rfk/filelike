@@ -160,8 +160,10 @@ class FileWrapper(FileLikeBase):
     def _tell(self):
         return self._fileobj.tell()
 
-##  Import the various classes from our sub-modules,
-##  and mark old names as deprecated.
+    def _truncate(self,size):
+        return self._fileobj.truncate(size)
+
+##  Import the various classes from our sub-modules.
 
 from filelike.wrappers.debug import Debug
 

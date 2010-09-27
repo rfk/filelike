@@ -148,7 +148,6 @@ class PadToBlockSize(FileWrapper):
         if whence > 0:
             # TODO: implementing these shouldn't be that hard...
             raise NotImplementedError
-        print "SEEK:", offset, whence
         self._fileobj.seek(0,0)
         self._pad_unread = ""
         self._pad_read = ""
@@ -183,6 +182,23 @@ class PadToBlockSize(FileWrapper):
 
     def _tell(self):
         return self._fileobj.tell() + len(self._pad_read)
+
+    def _truncate(self,size):
+        if size % self.blocksize != 0:
+            msg = "PadToBlockSize must be truncated to a multiple of " \
+                  "the blocksize"
+            raise IOError(msg)
+        pos = self._fileobj.tell()
+        if size <= pos:
+            self._pad_read = self._pad_unread = None
+        else:
+            self._fileobj.seek(0,2)
+            fsize = self._fileobj.tell()
+            self._fileobj.seek(pos,0)
+            if size > fsize:
+                msg = "PadToBlockSize can't truncate past end of file"
+                raise IOError(msg)
+        self._fileobj.truncate(size)
 
 
 class UnPadToBlockSize(FileWrapper):
@@ -304,4 +320,8 @@ class UnPadToBlockSize(FileWrapper):
 
     def _tell(self):
         return self._fileobj.tell() - len(self._pad_seen)
+
+    def _truncate(self,size):
+        msg = "UnPadToBlockSize objects are not truncatable"
+        raise filelike.NotTruncatableError(msg)
 

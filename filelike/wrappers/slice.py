@@ -149,4 +149,8 @@ class Slice(FileWrapper):
     def _tell(self):
         """Get position of file pointer."""
         return self._fileobj.tell() - self.start
+
+    def _truncate(self,size):
+        msg = "File slices are not truncatable"
+        raise filelike.NotTruncatableError(msg)
  

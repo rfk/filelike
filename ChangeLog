@@ -1,4 +1,10 @@
 
+Version 0.4.0
+
+   * Add support for truncate() via a primitive _truncate() method
+   * Increase default buffer size to 64K (was previous a measly 1K)
+   * Remove old class names, along with their deprecation warnings
+
 Version 0.3.7
 
    * Make __del__ more robust in the case of incomplete initialisation

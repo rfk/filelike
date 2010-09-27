@@ -71,6 +71,12 @@ class Debug(FileWrapper):
         self._debug("TELLED",pos)
         return pos
 
+    def _truncate(self,size):
+        self._debug("TRUNCATING",size)
+        self._fileobj.truncate(size)
+        self._debug("TRUNCATED")
+        return pos
+
     def flush(self):
         self._debug("FLUSHING")
         self._fileobj.flush()

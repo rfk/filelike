@@ -7,8 +7,8 @@ objects that provide a rich file-like interface, including reading, writing,
 seeking and iteration.  It also provides a number of useful classes built on
 top of this functionality.
 
-The main class is FileLikeBase, which implements the entire file-like
-interface on top of primitive _read(), _write(), _seek() and _tell() methods.
+The main class is FileLikeBase, which implements the entire file-like interface
+on top of primitive _read(), _write(), _seek(), _tell() and _truncate() methods.
 Subclasses may implement any or all of these methods to obtain the related
 higher-level file behaviors.
 

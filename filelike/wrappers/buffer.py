@@ -97,7 +97,7 @@ class Buffer(FileWrapper):
     def _read(self,sizehint=-1):
         #  First return any data available from the buffer.
         #  Since we don't flush the buffer after every write, certain OSes
-        #  (guess which!) will happy read junk data from the end of it.
+        #  (guess which!) will happily read junk data from the end of it.
         #  Instead, we explicitly read only up to self._in_pos.
         if not self._in_eof:
             buffered_size = self._in_pos - self._buffer.tell()
@@ -146,6 +146,13 @@ class Buffer(FileWrapper):
 
     def _tell(self):
         return self._buffer.tell()
+
+    def _truncate(self,size):
+        if self._check_mode("r") and not self._in_eof:
+            if size > self._in_pos:
+                self._read_rest()
+        self._in_eof = True
+        self._buffer.truncate(size)
         
     def _read_rest(self):
         """Read the rest of the input stream."""

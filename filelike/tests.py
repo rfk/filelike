@@ -313,17 +313,26 @@ class Test_IsTo(unittest.TestCase):
 class Test_Docs(unittest.TestCase):
     """Unittests for our documentation."""
 
-    def test_readme(self):
-        """Check that README.txt is up-to-date."""
-        import os
-        import difflib
-        readme = os.path.join(os.path.dirname(__file__),"..","README.txt")
-        if os.path.exists(readme):
-            diff = difflib.unified_diff(open(readme).readlines(),filelike.__doc__.splitlines(True))
-            diff = "".join(diff)
-            if diff:
-                print diff
-                raise RuntimeError
+    def test_README(self):
+        """Ensure that the README is in sync with the docstring.
+
+        This test should always pass; if the README is out of sync it just
+        updates it with the contents of filelike.__doc__.
+        """
+        dirname = os.path.dirname
+        readme = os.path.join(dirname(dirname(__file__)),"README.txt")
+        if not os.path.isfile(readme):
+            f = open(readme,"wb")
+            f.write(filelike.__doc__.encode())
+            f.close()
+        else:
+            f = open(readme,"rb")
+            if f.read() != filelike.__doc__:
+                f.close()
+                f = open(readme,"wb")
+                f.write(filelike.__doc__.encode())
+                f.close()
+
 
 
 def build_test_suite():

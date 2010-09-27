@@ -40,7 +40,7 @@ class FixedBlockSize(FileWrapper):
     example, to write data to a cipher function without manually 
     chunking text to match the cipher's block size.
     
-    No padding is added to the file is its length is not a multiple 
+    No padding is added to the file if its length is not a multiple 
     of the blocksize.  This might cause things to fail when this file
     is flushed or closed, since an incorrectly-sized string could be
     given in this case.
@@ -98,7 +98,7 @@ class FixedBlockSize(FileWrapper):
             self.seek(padstart - self.blocksize,1)
         return ""
 
-    # TODO: primative implementation of relative seek
+    # TODO: primitive implementation of relative seek
     def _seek(self,offset,whence):
         """Absolute seek, repecting block boundaries.
 
