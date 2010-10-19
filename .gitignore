@@ -8,3 +8,6 @@
 *.egg
 *.egg-info
 *.swp
+build
+dist
+distribute-0.6.10.tar.gz
