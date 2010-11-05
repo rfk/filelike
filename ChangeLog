@@ -1,4 +1,8 @@
 
+Version 0.4.1
+
+   * Buffer wrapper: support for truncating the underlying file on write-back
+
 Version 0.4.0
 
    * Add support for truncate() via a primitive _truncate() method

@@ -32,6 +32,9 @@ stream can be reset back to position zero, allowing flushes to be performed.
 
 """ 
 
+import os
+import sys
+
 import filelike
 from filelike.wrappers import FileWrapper
 
@@ -44,7 +47,7 @@ except ImportError:
 
 
 class Buffer(FileWrapper):
-    """Class implementing buffereing of input and output streams.
+    """Class implementing buffering of input and output streams.
     
     This class uses a separate buffer file to hold the contents of the
     underlying file while they are being manipulated.  As data is read
@@ -57,7 +60,14 @@ class Buffer(FileWrapper):
         self._buffer = SpooledTemporaryFile(max_size=max_size_in_memory)
         self._in_eof = False
         self._in_pos = 0
+        self._was_truncated = False
         super(Buffer,self).__init__(fileobj,mode)
+
+    def _buffer_size(self):
+        try:
+            return len(self._buffer.file.getvalue())
+        except AttributeError:
+            return os.fstat(self._buffer.fileno()).st_size
 
     def _buffer_chunks(self):
         chunk = self._buffer.read(16*1024)
@@ -79,6 +89,9 @@ class Buffer(FileWrapper):
                 self._buffer.seek(0)
         else:
             self._buffer.seek(0)
+        if self._was_truncated:
+            self._fileobj.truncate(self._buffer_size())
+            self._was_truncated = False
         for chunk in self._buffer_chunks():
             self._fileobj.write(chunk)
  
@@ -152,7 +165,16 @@ class Buffer(FileWrapper):
             if size > self._in_pos:
                 self._read_rest()
         self._in_eof = True
-        self._buffer.truncate(size)
+        try:
+            self._buffer.truncate(size)
+        except TypeError:
+            et,ev,tb = sys.exc_info()
+            # SpooledTemporaryFile.truncate() doesn't accept size paramter.
+            try:
+                self._buffer._file.truncate(size)
+            except Exception:
+                raise et,ev,tb
+        self._was_truncated = True
         
     def _read_rest(self):
         """Read the rest of the input stream."""
@@ -216,6 +238,9 @@ class FlushableBuffer(Buffer):
             else:
                 self._fileobj.seek(0)
             self._buffer.seek(0)
+        if self._was_truncated:
+            self._fileobj.truncate(self._buffer_size())
+            self._was_truncated = False
         for chunk in self._buffer_chunks():
             self._fileobj.write(chunk)
 
