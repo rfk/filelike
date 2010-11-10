@@ -2,6 +2,7 @@
 Version 0.4.1
 
    * Buffer wrapper: support for truncating the underlying file on write-back
+   * Translate wrapper: allow truncating to zero size
 
 Version 0.4.0
 

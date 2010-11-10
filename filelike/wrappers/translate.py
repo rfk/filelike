@@ -159,8 +159,14 @@ class Translate(FileWrapper):
             self._wfunc.reset()
 
     def _truncate(self,size):
-        msg = "Translate wrapper is not truncatable"
-        raise filelike.NotTruncatableError(msg)
+        #  For generic translation functions, we can only sensibly truncate
+        #  to zero bytes.  See BytewiseTranslate for truncation to any size.
+        if size != 0:
+            msg = "Translate wrapper can only be truncated to zero size"
+            raise IOError(msg)
+        self._seek(0,0)
+        self._fileobj.truncate(0)
+        
 
  
 class BytewiseTranslate(FileWrapper):

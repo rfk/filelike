@@ -90,7 +90,7 @@ class Buffer(FileWrapper):
         else:
             self._buffer.seek(0)
         if self._was_truncated:
-            self._fileobj.truncate(self._buffer_size())
+            self._fileobj.truncate(0)
             self._was_truncated = False
         for chunk in self._buffer_chunks():
             self._fileobj.write(chunk)
@@ -248,7 +248,7 @@ class FlushableBuffer(Buffer):
                 self._fileobj.seek(0)
             self._buffer.seek(0)
         if self._was_truncated:
-            self._fileobj.truncate(self._buffer_size())
+            self._fileobj.truncate(0)
             self._was_truncated = False
         for chunk in self._buffer_chunks():
             self._fileobj.write(chunk)
