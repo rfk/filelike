@@ -174,8 +174,17 @@ class Buffer(FileWrapper):
                 self._buffer._file.truncate(size)
             except Exception:
                 raise et,ev,tb
+        # StringIO objects don't truncate to larger size correctly.
+        if hasattr(self._buffer,"_file"):
+            _file = self._buffer._file
+            if hasattr(_file,"getvalue"):
+                if len(_file.getvalue()) != size:
+                    curpos = _file.tell()
+                    _file.seek(0,2)
+                    _file.write("\x00" * (size - len(_file.getvalue())))
+                    _file.seek(curpos)
         self._was_truncated = True
-        
+
     def _read_rest(self):
         """Read the rest of the input stream."""
         if self._in_eof:
