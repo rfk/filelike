@@ -174,6 +174,77 @@ def _BZip2_decoder(fileobj):
     return f
 filelike.open.decoders.append(_BZip2_decoder)
 
+import zlib
+class GZipMixin(object):
+    """Mixin for Compress/Decompress subclasses using gzip."""
+
+    def __init__(self,*args,**kwds):
+        if not hasattr(self,"compresslevel"):
+            self.compresslevel = 6
+        # Compression function with flush and reset.
+        c = [zlib.compressobj(self.compresslevel)]
+        def compress(data):
+            if data == "":
+                return ""
+            return c[0].compress(data)
+        def c_flush():
+            return c[0].flush()
+        def c_reset():
+            c[0] = zlib.compressobj(self.compresslevel)
+        compress.flush = c_flush
+        compress.reset = c_reset
+        self.compress = compress
+        # Decompression funtion with reset
+        d = [zlib.decompressobj(16+zlib.MAX_WBITS)]
+        def decompress(data):
+            if data == "":
+                return ""
+            return d[0].decompress(data)
+        def d_reset():
+            d[0] = zlib.compressobj(16+zlib.MAX_WBITS)
+        decompress.reset = d_reset
+        self.decompress = decompress
+        # These can now be used by superclass constructors
+        super(GZipMixin,self).__init__(*args,**kwds)
+
+
+class UnGZip(GZipMixin,Decompress):
+    """Class for reading and writing to a zipped file.
+        
+    This class behaves almost exactly like the zlib class from
+    the standard library, except that it accepts an arbitrary file-like
+    object.  All reads from the file are decompressed, all writes are
+    compressed.
+    """
+    
+    def __init__(self,fileobj,mode=None,compresslevel=9):
+        self.compresslevel = compresslevel
+        super(UnGZip,self).__init__(fileobj,mode=mode)
+
+
+class GZip(GZipMixin,Compress):
+    """Class for reading and writing a zipped file.
+        
+    This class is the dual of UnGZip - it compresses read data, and
+    decompresses written data.  Thus GZip(f) is the compressed version
+    of f.
+    """
+    
+    def __init__(self,fileobj,mode=None,compresslevel=9):
+        self.compresslevel = compresslevel
+        super(GZip,self).__init__(fileobj,mode=mode)
+
+
+##  Add handling of .gz files to filelike.open()
+def _GZip_decoder(fileobj):
+    """Decoder function for handling .gz files with filelike.open"""
+    if not fileobj.name.endswith(".gz"):
+        return None
+    f = UnGZip(fileobj)
+    f.name = fileobj.name[:-3]
+    return f
+filelike.open.decoders.append(_GZip_decoder)
+
 
 class NullZipMixin(object):
     """Mixin for Compress/Decompress subclasses using NullZip."""
