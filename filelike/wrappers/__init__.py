@@ -177,7 +177,7 @@ from filelike.wrappers.crypto import Encrypt, Decrypt
 
 from filelike.wrappers.buffer import Buffer, FlushableBuffer
 
-from filelike.wrappers.compress import BZip2, UnBZip2
+from filelike.wrappers.compress import BZip2, UnBZip2, GZip, UnGZip
 
 from filelike.wrappers.unix import Head
 

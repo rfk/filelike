@@ -1,4 +1,9 @@
 
+Version 0.4.2
+
+   * Add gzip support to filelike.wrappers.compress.
+     Thanks to timcera for the patch.
+
 Version 0.4.1
 
    * Buffer wrapper: support for truncating the underlying file on write-back

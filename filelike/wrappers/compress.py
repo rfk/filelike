@@ -33,6 +33,8 @@ from filelike.wrappers.translate import Translate
 from filelike.wrappers.buffer import FlushableBuffer
 
 import bz2
+import zlib
+
 
 class Decompress(FileWrapper):
     """Abstract base class for decompressing files.
@@ -174,7 +176,7 @@ def _BZip2_decoder(fileobj):
     return f
 filelike.open.decoders.append(_BZip2_decoder)
 
-import zlib
+
 class GZipMixin(object):
     """Mixin for Compress/Decompress subclasses using gzip."""
 
@@ -201,7 +203,7 @@ class GZipMixin(object):
                 return ""
             return d[0].decompress(data)
         def d_reset():
-            d[0] = zlib.compressobj(16+zlib.MAX_WBITS)
+            d[0] = zlib.decompressobj(16+zlib.MAX_WBITS)
         decompress.reset = d_reset
         self.decompress = decompress
         # These can now be used by superclass constructors
