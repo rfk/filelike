@@ -87,7 +87,7 @@ class Compress(FileWrapper):
         if mode is None:
             try:
                 mode = fileobj.mode
-            except AtributeError:
+            except AttributeError:
                 mode = "r+"
         myFileObj = None
         if "r" in mode:
