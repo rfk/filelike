@@ -1,14 +1,5 @@
 
-import sys
-import distribute_setup
-distribute_setup.use_setuptools()
-from setuptools import setup, find_packages
-
-
-setup_kwds = {}
-setup_kwds["test_suite"] = "filelike.tests.build_test_suite"
-if sys.version_info > (3,):
-    setup_kwds["use_2to3"] = True
+from setuptools import setup
 
 
 info = {}
@@ -40,23 +31,31 @@ KEYWORDS = "file filelike file-like filter crypt compress"
 LONG_DESC = info["__doc__"]
 
 
-PACKAGES = find_packages()
+PACKAGES = [
+    "filelike",
+    "filelike.pipeline",
+    "filelike.wrappers",
+    "filelike.wrappers.tests",
+]
 EXT_MODULES = []
 PKG_DATA = {}
 
 
-setup(name=NAME,
-      version=VERSION,
-      author=AUTHOR,
-      author_email=AUTHOR_EMAIL,
-      url=URL,
-      description=DESCRIPTION,
-      long_description=LONG_DESC,
-      keywords=KEYWORDS,
-      packages=PACKAGES,
-      ext_modules=EXT_MODULES,
-      package_data=PKG_DATA,
-      license=LICENSE,
-      **setup_kwds
-     )
+setup(
+    name=NAME,
+    version=VERSION,
+    author=AUTHOR,
+    author_email=AUTHOR_EMAIL,
+    url=URL,
+    description=DESCRIPTION,
+    long_description=LONG_DESC,
+    keywords=KEYWORDS,
+    packages=PACKAGES,
+    ext_modules=EXT_MODULES,
+    package_data=PKG_DATA,
+    license=LICENSE,
+    test_suite="filelike.tests.build_test_suite",
+    tests_require=["PyCrypto"],
+    use_2to3=True,
+)
 
