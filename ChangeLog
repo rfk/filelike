@@ -1,3 +1,7 @@
+Version 0.5.0
+
+   * Update packaging details to remove bundled distribute/setuptools,
+     and just generally simplify some things.
 
 Version 0.4.2
 

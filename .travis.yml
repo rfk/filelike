@@ -1,0 +1,25 @@
+sudo: false
+
+language: python
+
+matrix:
+  include:
+    # OSX doesn't work with `language: python` yet
+    - os: osx
+      language: generic
+    - os: linux
+      python: 2.7
+    - os: linux
+      python: 3.4
+    - os: linux
+      python: 3.5
+    - os: linux
+      python: 3.6
+    - os: linux
+      python: pypy
+
+script:
+  - python setup.py test
+
+notifications:
+  - email: ryan@rfk.id.au
