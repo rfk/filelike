@@ -1,6 +1,14 @@
 
+Status: Unmaintained
+====================
 
-    filelike: a python module for creating and handling file-like objects.
+[![No Maintenance Intended](http://unmaintained.tech/badge.svg)](http://unmaintained.tech/)
+
+I am [no longer actively maintaining this project](https://rfk.id.au/blog/entry/archiving-open-source-projects/).
+
+
+filelike: a python module for creating and handling file-like objects.
+======================================================================
 
 This module takes care of the groundwork for implementing and manipulating
 objects that provide a rich file-like interface, including reading, writing,
